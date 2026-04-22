@@ -7,3 +7,5 @@ out/
 next-env.d.ts
 .vercel
 
+# Local Claude Code worktrees
+.claude/worktrees/
