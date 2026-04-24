@@ -39,14 +39,18 @@ function coverPalette(bg: CoverBg): { bg: string; fg: string; muted: string; acc
   }
 }
 
-// Render **bold** spans inline, with the accent color applied.
+// Render **bold** / *emphasis* spans inline, with the accent color applied.
+// Handles both double-asterisk and single-asterisk emphasis so Claude's
+// output never leaks raw asterisks into the slide regardless of which
+// style it emits.
 function renderInline(text: string, accentColor = ACCENT_COLOR) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*)/g);
   return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
+    if (/^\*{1,2}[^*\n]+\*{1,2}$/.test(part)) {
+      const content = part.replace(/^\*+/, "").replace(/\*+$/, "");
       return (
         <span key={i} style={{ fontWeight: 700, color: accentColor }}>
-          {part.slice(2, -2)}
+          {content}
         </span>
       );
     }
