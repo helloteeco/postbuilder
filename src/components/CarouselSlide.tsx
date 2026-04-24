@@ -40,9 +40,8 @@ function coverPalette(bg: CoverBg): { bg: string; fg: string; muted: string; acc
 }
 
 // Render **bold** / *emphasis* spans inline, with the accent color applied.
-// Handles both double-asterisk and single-asterisk emphasis so Claude's
-// output never leaks raw asterisks into the slide regardless of which
-// style it emits.
+// Handles both double-asterisk and single-asterisk emphasis and drops any
+// leftover stray asterisks so the exported PNG never shows raw * chars.
 function renderInline(text: string, accentColor = ACCENT_COLOR) {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*)/g);
   return parts.map((part, i) => {
@@ -54,7 +53,8 @@ function renderInline(text: string, accentColor = ACCENT_COLOR) {
         </span>
       );
     }
-    return <span key={i}>{part}</span>;
+    // Strip any stray, unpaired asterisks that weren't part of a span.
+    return <span key={i}>{part.replace(/\*/g, "")}</span>;
   });
 }
 
