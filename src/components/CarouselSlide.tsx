@@ -386,7 +386,7 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             width: SLIDE_WIDTH,
             height: SLIDE_HEIGHT,
             background: palette.bg,
-            padding: "240px 80px 380px",
+            padding: "200px 80px 480px",
             boxSizing: "border-box",
             fontFamily:
               "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -401,16 +401,16 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             outlineOffset: -4,
           }}
         >
-          {/* Hard cap on hook+subtitle height so they can never touch the
-              profile. Container inner height is 1350 - 240 - 380 = 730px.
-              Profile is ~140px; reserving ≥80px gap → hook cap of 510. */}
-          <div style={{ maxHeight: 510, overflow: "hidden" }}>
+          {/* Hook+subtitle hard-capped so they never approach the profile.
+              Inner height: 1350 - 200 - 480 = 670. Profile ~140. Reserved
+              gap ≥ 80. Max hook block = 670 - 140 - 80 = 450. */}
+          <div style={{ maxHeight: 450, overflow: "hidden" }}>
             <div
               style={{
-                fontSize: 132,
+                fontSize: 120,
                 fontWeight: 700,
                 lineHeight: 1.04,
-                letterSpacing: "-0.025em",
+                letterSpacing: "-0.022em",
               }}
             >
               {renderInline(slide.headline, palette.accent)}
@@ -418,8 +418,8 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             {slide.subtitle && (
               <div
                 style={{
-                  marginTop: 28,
-                  fontSize: 48,
+                  marginTop: 24,
+                  fontSize: 44,
                   lineHeight: 1.3,
                   color: palette.muted,
                 }}
