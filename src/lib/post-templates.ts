@@ -94,9 +94,9 @@ export const DEFAULT_PARAMS: PostBuilderParams = {
   readingLevel: "3rd grade",
   audience: "high income earners with $65k saved",
   tone: "confident, direct, no-fluff",
-  maxCharsBody: 280,
-  maxBullets: 6,
-  maxCharsBullet: 60,
+  maxCharsBody: 220,
+  maxBullets: 5,
+  maxCharsBullet: 42,
 };
 
 export const DEFAULT_PROFILE: PostBuilderProfile = {

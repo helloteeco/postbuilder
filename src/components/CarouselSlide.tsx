@@ -67,7 +67,7 @@ const ProfileRow = ({ profile }: { profile: PostBuilderProfile }) => {
         display: "flex",
         alignItems: "center",
         gap: 28,
-        marginBottom: 72,
+        marginBottom: 48,
       }}
     >
       {/* Avatar */}
@@ -147,7 +147,7 @@ const HookOpenerBody = ({
       {headline}
     </div>
     {items && items.length > 0 && (
-      <div style={{ marginTop: 44, fontSize: 54, lineHeight: 1.35 }}>
+      <div style={{ marginTop: 32, fontSize: 54, lineHeight: 1.35 }}>
         {items.map((item, i) => (
           <div
             key={i}
@@ -159,9 +159,9 @@ const HookOpenerBody = ({
       </div>
     )}
     {footer && footer.length > 0 && (
-      <div style={{ marginTop: 44, fontSize: 52, lineHeight: 1.35 }}>
+      <div style={{ marginTop: 32, fontSize: 52, lineHeight: 1.35 }}>
         {footer.map((line, i) => (
-          <div key={i} style={{ marginTop: i === 0 ? 0 : 36 }}>
+          <div key={i} style={{ marginTop: i === 0 ? 0 : 24 }}>
             {renderInline(line)}
           </div>
         ))}
@@ -173,7 +173,7 @@ const HookOpenerBody = ({
 const PersonalStoryBody = ({ paragraphs }: { paragraphs: string[] }) => (
   <div style={{ fontSize: 54, lineHeight: 1.35, color: "#0F1419" }}>
     {paragraphs.map((p, i) => (
-      <div key={i} style={{ marginTop: i === 0 ? 0 : 40 }}>
+      <div key={i} style={{ marginTop: i === 0 ? 0 : 24 }}>
         {renderInline(p)}
       </div>
     ))}
@@ -195,7 +195,7 @@ const CriteriaBulletsBody = ({
     </div>
     <div
       style={{
-        marginTop: 40,
+        marginTop: 32,
         fontSize: 52,
         lineHeight: 1.35,
         color: "#0F1419",
@@ -205,7 +205,7 @@ const CriteriaBulletsBody = ({
         <div
           key={i}
           style={{
-            marginBottom: 20,
+            marginBottom: 16,
             paddingLeft: 36,
             textIndent: -36,
           }}
@@ -215,7 +215,7 @@ const CriteriaBulletsBody = ({
       ))}
     </div>
     {footer && (
-      <div style={{ marginTop: 40, fontSize: 54, lineHeight: 1.3 }}>
+      <div style={{ marginTop: 32, fontSize: 54, lineHeight: 1.3 }}>
         {renderInline(footer)}
       </div>
     )}
@@ -260,7 +260,7 @@ const MarketDetailBody = ({
     )}
     <div
       style={{
-        marginTop: 40,
+        marginTop: 32,
         fontSize: 48,
         lineHeight: 1.3,
         color: "#0F1419",
@@ -270,7 +270,7 @@ const MarketDetailBody = ({
         <div
           key={i}
           style={{
-            marginBottom: 18,
+            marginBottom: 14,
             paddingLeft: 32,
             textIndent: -32,
           }}
@@ -280,7 +280,7 @@ const MarketDetailBody = ({
       ))}
     </div>
     {stats && stats.length > 0 && (
-      <div style={{ marginTop: 48, fontSize: 48, lineHeight: 1.35 }}>
+      <div style={{ marginTop: 32, fontSize: 48, lineHeight: 1.35 }}>
         {stats.map((s, i) => (
           <div key={i}>
             {s.label}: {s.value}
@@ -302,7 +302,7 @@ const NumberedListBody = ({
     <div style={{ fontSize: 54, lineHeight: 1.25, color: "#0F1419" }}>
       {heading}
     </div>
-    <div style={{ marginTop: 36, fontSize: 52, lineHeight: 1.4 }}>
+    <div style={{ marginTop: 32, fontSize: 52, lineHeight: 1.4 }}>
       {items.map((item, i) => (
         <div
           key={i}
@@ -318,7 +318,7 @@ const NumberedListBody = ({
 const PlainTextBody = ({ paragraphs }: { paragraphs: string[] }) => (
   <div style={{ fontSize: 54, lineHeight: 1.35, color: "#0F1419" }}>
     {paragraphs.map((p, i) => (
-      <div key={i} style={{ marginTop: i === 0 ? 0 : 40 }}>
+      <div key={i} style={{ marginTop: i === 0 ? 0 : 24 }}>
         {renderInline(p)}
       </div>
     ))}
@@ -328,7 +328,7 @@ const PlainTextBody = ({ paragraphs }: { paragraphs: string[] }) => (
 const CtaBody = ({ paragraphs }: { paragraphs: string[] }) => (
   <div style={{ fontSize: 54, lineHeight: 1.35, color: "#0F1419" }}>
     {paragraphs.map((p, i) => (
-      <div key={i} style={{ marginTop: i === 0 ? 0 : 40 }}>
+      <div key={i} style={{ marginTop: i === 0 ? 0 : 24 }}>
         {renderInline(p)}
       </div>
     ))}
@@ -391,6 +391,8 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
           color: "#0F1419",
           textAlign: "left",
+          overflowWrap: "break-word",
+          wordBreak: "break-word",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",

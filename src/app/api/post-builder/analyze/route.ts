@@ -40,21 +40,24 @@ CARDINAL RULES — follow without exception:
 1. Return ONLY valid JSON matching the schema shown below. No commentary before or after.
 2. Produce exactly ${params.slideCount} slides unless the content genuinely needs fewer — never more.
 3. Compress mercilessly. Each slide must be SCANNABLE in under 4 seconds.
-4. Per-slide budgets:
-   - Body text across a slide: stay under ~${params.maxCharsBody} characters total.
+4. Per-slide budgets (HARD LIMITS — never exceed):
+   - Body text across a slide: under ~${params.maxCharsBody} characters TOTAL.
    - Bullets per slide: max ${params.maxBullets}.
-   - Each bullet: under ~${params.maxCharsBullet} characters. Prefer short fragments over full sentences.
-5. NEVER flood a slide. If a point needs more space, split it into another slide.
-6. Slide 1 is the hook. It must stop the scroll. Keep headline <= 90 chars.
-7. Final slide is always a CTA — DM keyword, free resource, or clear next step.
-8. Use the client's signature structure when relevant:
+   - Each bullet: under ~${params.maxCharsBullet} characters AND must fit on ONE LINE when rendered at 48px on a 920px-wide canvas. Roughly: if it's more than 6-7 words, it is too long.
+   - Headlines: under ~60 characters. Under ~8 words.
+   - Paragraphs: under ~20 words each. Prefer 2-3 short paragraphs over one long one.
+5. NEVER flood a slide. If a point needs more space, split it into another slide or cut the word count.
+6. If the source copy is long, REWRITE — do not paraphrase. Your job is to cut, not to preserve.
+7. Slide 1 is the hook. It must stop the scroll. Keep headline <= 60 chars.
+8. Final slide is always a CTA — DM keyword, free resource, or clear next step.
+9. Use the client's signature structure when relevant:
    - Opener hook slide (headline + optional preview list)
    - Personal story / credibility slide
    - Criteria / framework slide (bullets)
    - Repeated detail slides (ranked items with bullets + stats)
    - CTA slide
-9. Inline bold is allowed via **double asterisks** — use it sparingly, only on key phrases.
-10. Numbers should feel specific, not rounded ($75,940 > "about $76K"). If the source gives a vague number, keep it vague — do not fabricate.
+10. Inline bold is allowed via **double asterisks** — use it sparingly, only on key phrases.
+11. Numbers should feel specific, not rounded ($75,940 > "about $76K"). If the source gives a vague number, keep it vague — do not fabricate.
 
 SLIDE TYPES (use the matching \`type\` field):
 - "hook-opener": { headline: string; items?: string[]; footer?: string[] }
