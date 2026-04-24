@@ -144,10 +144,17 @@ const HookOpenerBody = ({
 }) => (
   <>
     <div style={{ fontSize: 54, lineHeight: 1.3, color: "#0F1419" }}>
-      {headline}
+      {renderInline(headline)}
     </div>
     {items && items.length > 0 && (
-      <div style={{ marginTop: 32, fontSize: 54, lineHeight: 1.35 }}>
+      <div
+        style={{
+          marginTop: 32,
+          fontSize: 54,
+          lineHeight: 1.35,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
         {items.map((item, i) => (
           <div
             key={i}
@@ -191,7 +198,7 @@ const CriteriaBulletsBody = ({
 }) => (
   <>
     <div style={{ fontSize: 54, lineHeight: 1.3, color: "#0F1419" }}>
-      {heading}
+      {renderInline(heading)}
     </div>
     <div
       style={{
@@ -244,18 +251,18 @@ const MarketDetailBody = ({
         color: "#0F1419",
       }}
     >
-      #{rank} {title}
+      #{rank} {renderInline(title)}
     </div>
     {subtitle && (
       <div
         style={{
           fontSize: 48,
-          lineHeight: 1.25,
+          lineHeight: 1.3,
           color: "#0F1419",
-          marginTop: 6,
+          marginTop: 24,
         }}
       >
-        {subtitle}
+        {renderInline(subtitle)}
       </div>
     )}
     <div
@@ -280,10 +287,17 @@ const MarketDetailBody = ({
       ))}
     </div>
     {stats && stats.length > 0 && (
-      <div style={{ marginTop: 32, fontSize: 48, lineHeight: 1.35 }}>
+      <div
+        style={{
+          marginTop: 32,
+          fontSize: 48,
+          lineHeight: 1.35,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
         {stats.map((s, i) => (
           <div key={i}>
-            {s.label}: {s.value}
+            {renderInline(s.label)}: {renderInline(s.value)}
           </div>
         ))}
       </div>
@@ -300,9 +314,16 @@ const NumberedListBody = ({
 }) => (
   <>
     <div style={{ fontSize: 54, lineHeight: 1.25, color: "#0F1419" }}>
-      {heading}
+      {renderInline(heading)}
     </div>
-    <div style={{ marginTop: 32, fontSize: 52, lineHeight: 1.4 }}>
+    <div
+      style={{
+        marginTop: 32,
+        fontSize: 52,
+        lineHeight: 1.4,
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
       {items.map((item, i) => (
         <div
           key={i}
