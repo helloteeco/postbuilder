@@ -1,6 +1,6 @@
 "use client";
 
-import type { Slide } from "@/lib/post-templates";
+import type { CoverBg, Slide } from "@/lib/post-templates";
 
 interface Props {
   slide: Slide;
@@ -108,20 +108,49 @@ export default function SlideEditor({
       {slide.type === "hook-opener" && (
         <>
           <Text
-            label="Headline"
+            label="Headline (the hook — keep it under 8 words)"
             value={slide.headline}
             onChange={(v) => patch({ headline: v })}
           />
-          <Lines
-            label="Preview items (numbered, optional)"
-            value={slide.items ?? []}
-            onChange={(v) => patch({ items: v })}
+          <Text
+            label="Subtitle (optional, small line below the hook)"
+            value={slide.subtitle ?? ""}
+            onChange={(v) => patch({ subtitle: v })}
           />
-          <Lines
-            label="Footer lines (optional)"
-            value={slide.footer ?? []}
-            onChange={(v) => patch({ footer: v })}
-          />
+          <div>
+            <div className="mb-1.5 text-xs text-gray-600">Background</div>
+            <div className="flex gap-2">
+              {(["white", "yellow", "dark"] as CoverBg[]).map((bg) => {
+                const active = (slide.bg ?? "white") === bg;
+                const swatch =
+                  bg === "white" ? "#FFFFFF" : bg === "yellow" ? "#F5B935" : "#0F1419";
+                return (
+                  <button
+                    key={bg}
+                    type="button"
+                    onClick={() => patch({ bg })}
+                    className={`flex items-center gap-2 rounded border px-3 py-1.5 text-xs transition ${
+                      active
+                        ? "border-gray-900 ring-2 ring-gray-900/10"
+                        : "border-gray-300 hover:border-gray-400"
+                    }`}
+                  >
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 14,
+                        height: 14,
+                        borderRadius: 3,
+                        background: swatch,
+                        border: bg === "white" ? "1px solid #D1D5DB" : "none",
+                      }}
+                    />
+                    <span className="capitalize">{bg}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </>
       )}
 

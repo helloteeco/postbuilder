@@ -38,14 +38,14 @@ export default function ParamsPanel({ params, onChange }: Props) {
       <div className="text-sm font-semibold text-gray-700">Carousel params</div>
 
       <label className="block text-xs text-gray-600">
-        Slide count
+        Slide count (max 10)
         <input
           type="number"
           min={3}
-          max={15}
+          max={10}
           value={params.slideCount}
           onChange={(e) =>
-            update({ slideCount: Math.max(3, Math.min(15, Number(e.target.value) || 10)) })
+            update({ slideCount: Math.max(3, Math.min(10, Number(e.target.value) || 10)) })
           }
           className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
         />

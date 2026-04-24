@@ -11,11 +11,18 @@ export type SlideType =
   | "plain-text" // simple paragraphs
   | "cta"; // closing DM call-to-action
 
+// Cover-slide background option. Drives bg color + text color in the
+// hook-opener renderer. "white" = dark text on white, "yellow" = dark
+// text on signature yellow, "dark" = white text on near-black.
+export type CoverBg = "white" | "yellow" | "dark";
+
 export interface HookOpenerSlide {
   type: "hook-opener";
   headline: string; // e.g. "These are the best rural Airbnb markets for 2026:"
-  items?: string[]; // numbered preview list, rendered "1. ..."
-  footer?: string[]; // short closing paragraphs
+  subtitle?: string; // small secondary line under the headline (often parenthetical)
+  items?: string[]; // numbered preview list, rendered "1. ..." — optional
+  footer?: string[]; // short closing paragraphs — optional
+  bg?: CoverBg; // cover background; defaults to "white"
 }
 
 export interface PersonalStorySlide {
@@ -128,6 +135,7 @@ export function slideCharCount(slide: Slide): number {
     case "hook-opener":
       return (
         slide.headline.length +
+        (slide.subtitle?.length ?? 0) +
         (slide.items?.join(" ").length ?? 0) +
         (slide.footer?.join(" ").length ?? 0)
       );
