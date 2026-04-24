@@ -39,7 +39,7 @@ Reading level target: ${params.readingLevel}. Use short, plain words. No jargon.
 CARDINAL RULES — follow without exception:
 1. Return ONLY valid JSON matching the schema shown below. No commentary before or after.
 2. Produce no more than ${Math.min(params.slideCount, 10)} slides TOTAL. Never exceed 10. Produce fewer if the content doesn't need more.
-3. Slide 1 is ALWAYS type "hook-opener". It is a COVER slide: one short headline + optional subtitle. Do NOT include items or footer on slide 1 — just the hook. The headline must stop the scroll on its own. HARD LIMIT: under 6 words AND under 32 characters on any single line (because it's rendered at 104px — anything longer gets cut off). If the hook needs more context, put the extra phrase in the subtitle (max 8 words). Treat slide 1 like a magazine cover, not a paragraph.
+3. Slide 1 is ALWAYS type "hook-opener". It is a COVER slide: one punchy headline + optional subtitle. Do NOT include items or footer on slide 1 — just the hook. Rendered at 112px across 920px of width, so the headline will wrap onto 2-3 lines — that is good and expected. Write the headline as a natural, complete idea ("6 rural markets I'd actually buy right now" is better than "6 Rural Markets"). Treat slide 1 like a magazine cover, not a paragraph. Guardrails: ≤50 characters total, ≤9 words, and no single word longer than 14 characters (since a word that long will break mid-word when rendered).
 4. Final slide is always type "cta" — DM keyword, free resource, or clear next step.
 5. Compress mercilessly. Each slide must be SCANNABLE in under 4 seconds.
 6. Per-slide budgets (HARD LIMITS — never exceed):
@@ -47,7 +47,7 @@ CARDINAL RULES — follow without exception:
    - Bullets per slide: max ${params.maxBullets}.
    - Each bullet: under ~${params.maxCharsBullet} characters AND must fit on ONE LINE when rendered at 48px on a 920px-wide canvas. Roughly: if it's more than 6-7 words, it is too long.
    - Headlines (body slides): under ~60 characters. Under ~8 words.
-   - Cover headline (slide 1): STRICT — under 32 characters, under 6 words. If you're over either limit, cut. Put extra context in subtitle if needed.
+   - Cover headline (slide 1): ≤50 characters, ≤9 words, no individual word longer than 14 characters. Write it naturally — multi-line wrap is fine.
    - Paragraphs: under ~20 words each. Prefer 2-3 short paragraphs over one long one.
 7. NEVER flood a slide. If a point needs more space, split it into another slide or cut the word count.
 8. If the source copy is long, REWRITE — do not paraphrase. Your job is to cut, not to preserve.

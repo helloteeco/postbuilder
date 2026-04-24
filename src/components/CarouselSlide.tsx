@@ -404,10 +404,10 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
           <div>
             <div
               style={{
-                fontSize: 104,
+                fontSize: 112,
                 fontWeight: 700,
-                lineHeight: 1.08,
-                letterSpacing: "-0.015em",
+                lineHeight: 1.06,
+                letterSpacing: "-0.02em",
               }}
             >
               {renderInline(slide.headline, palette.accent)}
