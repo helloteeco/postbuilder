@@ -149,8 +149,11 @@ const HookOpenerBody = ({
     {items && items.length > 0 && (
       <div style={{ marginTop: 44, fontSize: 54, lineHeight: 1.35 }}>
         {items.map((item, i) => (
-          <div key={i}>
-            {i + 1}. {item}
+          <div
+            key={i}
+            style={{ paddingLeft: 54, textIndent: -54 }}
+          >
+            {i + 1}.&nbsp;&nbsp;{renderInline(item)}
           </div>
         ))}
       </div>
@@ -190,22 +193,27 @@ const CriteriaBulletsBody = ({
     <div style={{ fontSize: 54, lineHeight: 1.3, color: "#0F1419" }}>
       {heading}
     </div>
-    <ul
+    <div
       style={{
         marginTop: 40,
-        paddingLeft: 60,
         fontSize: 52,
         lineHeight: 1.35,
         color: "#0F1419",
-        listStyleType: "disc",
       }}
     >
       {bullets.map((b, i) => (
-        <li key={i} style={{ marginBottom: 20 }}>
-          {renderInline(b)}
-        </li>
+        <div
+          key={i}
+          style={{
+            marginBottom: 20,
+            paddingLeft: 36,
+            textIndent: -36,
+          }}
+        >
+          •&nbsp;&nbsp;{renderInline(b)}
+        </div>
       ))}
-    </ul>
+    </div>
     {footer && (
       <div style={{ marginTop: 40, fontSize: 54, lineHeight: 1.3 }}>
         {renderInline(footer)}
@@ -250,22 +258,27 @@ const MarketDetailBody = ({
         {subtitle}
       </div>
     )}
-    <ul
+    <div
       style={{
         marginTop: 40,
-        paddingLeft: 60,
         fontSize: 48,
         lineHeight: 1.3,
         color: "#0F1419",
-        listStyleType: "disc",
       }}
     >
       {bullets.map((b, i) => (
-        <li key={i} style={{ marginBottom: 18 }}>
-          {renderInline(b)}
-        </li>
+        <div
+          key={i}
+          style={{
+            marginBottom: 18,
+            paddingLeft: 32,
+            textIndent: -32,
+          }}
+        >
+          •&nbsp;&nbsp;{renderInline(b)}
+        </div>
       ))}
-    </ul>
+    </div>
     {stats && stats.length > 0 && (
       <div style={{ marginTop: 48, fontSize: 48, lineHeight: 1.35 }}>
         {stats.map((s, i) => (
@@ -291,8 +304,11 @@ const NumberedListBody = ({
     </div>
     <div style={{ marginTop: 36, fontSize: 52, lineHeight: 1.4 }}>
       {items.map((item, i) => (
-        <div key={i}>
-          {i + 1}. {item}
+        <div
+          key={i}
+          style={{ paddingLeft: 52, textIndent: -52 }}
+        >
+          {i + 1}.&nbsp;&nbsp;{renderInline(item)}
         </div>
       ))}
     </div>
