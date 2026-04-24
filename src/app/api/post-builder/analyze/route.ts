@@ -56,7 +56,7 @@ CARDINAL RULES — follow without exception:
    - Criteria / framework slide (bullets)
    - Repeated detail slides (ranked items with bullets + stats)
    - CTA slide
-10. Inline bold is allowed via **double asterisks** — use it sparingly, only on key phrases.
+10. Inline bold via **double asterisks** is REQUIRED on every slide. Pick 2-4 high-impact words or short phrases per slide and wrap them in ** ** to stop the scroll. Bold the things the reader's eye should land on first: numbers, dollar amounts, emotional trigger words (e.g. **$500K**, **hidden**, **actually buy**, **outperforms**, **nobody**, city/market names on detail slides). Never bold a whole sentence; bold the nouns and numbers inside it.
 11. Numbers should feel specific, not rounded ($75,940 > "about $76K"). If the source gives a vague number, keep it vague — do not fabricate.
 
 SLIDE TYPES (use the matching \`type\` field):

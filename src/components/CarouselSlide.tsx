@@ -143,7 +143,7 @@ const HookOpenerBody = ({
   footer?: string[];
 }) => (
   <>
-    <div style={{ fontSize: 56, lineHeight: 1.25, color: "#0F1419" }}>
+    <div style={{ fontSize: 54, lineHeight: 1.3, color: "#0F1419" }}>
       {headline}
     </div>
     {items && items.length > 0 && (
@@ -238,9 +238,9 @@ const MarketDetailBody = ({
   <>
     <div
       style={{
-        fontSize: 64,
+        fontSize: 52,
         fontWeight: 700,
-        lineHeight: 1.15,
+        lineHeight: 1.2,
         color: "#0F1419",
       }}
     >
@@ -249,10 +249,10 @@ const MarketDetailBody = ({
     {subtitle && (
       <div
         style={{
-          fontSize: 50,
-          lineHeight: 1.2,
+          fontSize: 48,
+          lineHeight: 1.25,
           color: "#0F1419",
-          marginTop: 8,
+          marginTop: 6,
         }}
       >
         {subtitle}
