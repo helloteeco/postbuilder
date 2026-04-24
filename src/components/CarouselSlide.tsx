@@ -165,11 +165,11 @@ const ProfileRowCompact = ({
   color: string;
   mutedColor: string;
 }) => {
-  const avatarSize = 88;
+  const avatarSize = 128;
   const fallbackInitial =
     profile.displayName.trim().charAt(0).toUpperCase() || "?";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
       <div
         style={{
           width: avatarSize,
@@ -182,7 +182,7 @@ const ProfileRowCompact = ({
           alignItems: "center",
           justifyContent: "center",
           color: "#fff",
-          fontSize: 36,
+          fontSize: 52,
           fontWeight: 700,
           flexShrink: 0,
         }}
@@ -199,22 +199,22 @@ const ProfileRowCompact = ({
           fallbackInitial
         )}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
-            fontSize: 32,
+            gap: 10,
+            fontSize: 46,
             fontWeight: 700,
             color,
             lineHeight: 1.1,
           }}
         >
           <span>{profile.displayName || "Your Name"}</span>
-          {profile.verified && <VerifiedCheck size={28} />}
+          {profile.verified && <VerifiedCheck size={40} />}
         </div>
-        <div style={{ fontSize: 28, color: mutedColor, lineHeight: 1.1 }}>
+        <div style={{ fontSize: 38, color: mutedColor, lineHeight: 1.1 }}>
           {profile.handle || "@handle"}
         </div>
       </div>
