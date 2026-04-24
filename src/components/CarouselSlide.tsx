@@ -145,7 +145,7 @@ const ProfileRow = ({
           }}
         >
           <span>{profile.displayName || "Your Name"}</span>
-          {profile.verified && <VerifiedCheck size={40} />}
+          {profile.verified && <VerifiedCheck size={50} />}
         </div>
         <div style={{ fontSize: 38, color: mutedColor, lineHeight: 1.1 }}>
           {profile.handle || "@handle"}
@@ -212,7 +212,7 @@ const ProfileRowCompact = ({
           }}
         >
           <span>{profile.displayName || "Your Name"}</span>
-          {profile.verified && <VerifiedCheck size={40} />}
+          {profile.verified && <VerifiedCheck size={52} />}
         </div>
         <div style={{ fontSize: 38, color: mutedColor, lineHeight: 1.1 }}>
           {profile.handle || "@handle"}
