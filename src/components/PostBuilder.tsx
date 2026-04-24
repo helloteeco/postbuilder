@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { CarouselSlide, SLIDE_SIZE } from "@/components/CarouselSlide";
+import { CarouselSlide, SLIDE_HEIGHT, SLIDE_WIDTH } from "@/components/CarouselSlide";
 import {
   DEFAULT_PARAMS,
   DEFAULT_PROFILE,
@@ -57,7 +57,7 @@ export default function PostBuilder() {
   const [error, setError] = useState<string | null>(null);
   const [igStatus, setIgStatus] = useState<string | null>(null);
 
-  // Hidden full-size render targets for PNG export. Each ref is 1080x1080.
+  // Hidden full-size render targets for PNG export. Each ref is 1080x1350 (4:5 portrait).
   const exportRefs = useRef<(HTMLDivElement | null)[]>([]);
   exportRefs.current = slides.map((_, i) => exportRefs.current[i] ?? null);
 
@@ -276,7 +276,7 @@ export default function PostBuilder() {
             ref={(el) => {
               exportRefs.current[i] = el;
             }}
-            style={{ width: SLIDE_SIZE, height: SLIDE_SIZE }}
+            style={{ width: SLIDE_WIDTH, height: SLIDE_HEIGHT }}
           >
             <CarouselSlide slide={s} profile={profile} />
           </div>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toPng } from "html-to-image";
 import JSZip from "jszip";
+import { SLIDE_HEIGHT, SLIDE_WIDTH } from "@/components/CarouselSlide";
 
 interface Props {
   getSlideNodes: () => (HTMLElement | null)[];
@@ -21,12 +22,11 @@ function download(blob: Blob, filename: string) {
 }
 
 async function nodeToBlob(node: HTMLElement): Promise<Blob> {
-  // Wait a tick so any images finish loading, then render.
   const dataUrl = await toPng(node, {
     cacheBust: true,
     pixelRatio: 1,
-    width: 1080,
-    height: 1080,
+    width: SLIDE_WIDTH,
+    height: SLIDE_HEIGHT,
     style: { transform: "none" },
   });
   const resp = await fetch(dataUrl);

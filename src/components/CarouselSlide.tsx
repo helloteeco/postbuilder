@@ -14,7 +14,10 @@ import type { CoverBg, PostBuilderProfile, Slide } from "@/lib/post-templates";
  *   - "body" (everything else): profile row at top, content below.
  */
 
-export const SLIDE_SIZE = 1080;
+export const SLIDE_WIDTH = 1080;
+export const SLIDE_HEIGHT = 1350; // 4:5 portrait — matches Instagram's default feed aspect
+// Deprecated alias kept for older imports.
+export const SLIDE_SIZE = SLIDE_WIDTH;
 
 // Accent color applied to inline **bold** spans. Tuned to be readable on
 // white, yellow, and dark backgrounds.
@@ -380,17 +383,16 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
         <div
           ref={ref}
           style={{
-            width: SLIDE_SIZE,
-            height: SLIDE_SIZE,
+            width: SLIDE_WIDTH,
+            height: SLIDE_HEIGHT,
             background: palette.bg,
-            padding: "100px 90px",
+            padding: "120px 80px",
             boxSizing: "border-box",
             fontFamily:
               "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
             color: palette.fg,
             textAlign: "left",
             overflowWrap: "break-word",
-            wordBreak: "break-word",
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
@@ -402,10 +404,10 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
           <div>
             <div
               style={{
-                fontSize: 84,
+                fontSize: 104,
                 fontWeight: 700,
-                lineHeight: 1.12,
-                letterSpacing: "-0.01em",
+                lineHeight: 1.08,
+                letterSpacing: "-0.015em",
               }}
             >
               {renderInline(slide.headline, palette.accent)}
@@ -413,8 +415,8 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             {slide.subtitle && (
               <div
                 style={{
-                  marginTop: 24,
-                  fontSize: 42,
+                  marginTop: 28,
+                  fontSize: 48,
                   lineHeight: 1.3,
                   color: palette.muted,
                 }}
@@ -437,8 +439,8 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
       <div
         ref={ref}
         style={{
-          width: SLIDE_SIZE,
-          height: SLIDE_SIZE,
+          width: SLIDE_WIDTH,
+          height: SLIDE_HEIGHT,
           background: "#FFFFFF",
           padding: "80px 80px",
           boxSizing: "border-box",
@@ -447,7 +449,6 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
           color: "#0F1419",
           textAlign: "left",
           overflowWrap: "break-word",
-          wordBreak: "break-word",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",

@@ -1,6 +1,6 @@
 "use client";
 
-import { CarouselSlide, SLIDE_SIZE } from "@/components/CarouselSlide";
+import { CarouselSlide, SLIDE_HEIGHT, SLIDE_WIDTH } from "@/components/CarouselSlide";
 import { slideCharCount, type PostBuilderParams, type PostBuilderProfile, type Slide } from "@/lib/post-templates";
 
 interface Props {
@@ -11,7 +11,8 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
-const THUMB_SIZE = 260; // px in the grid
+const THUMB_WIDTH = 240;
+const THUMB_HEIGHT = Math.round((THUMB_WIDTH * SLIDE_HEIGHT) / SLIDE_WIDTH); // preserve 4:5 aspect
 
 export default function SlidePreviewGrid({
   slides,
@@ -29,7 +30,7 @@ export default function SlidePreviewGrid({
     );
   }
 
-  const scale = THUMB_SIZE / SLIDE_SIZE;
+  const scale = THUMB_WIDTH / SLIDE_WIDTH;
 
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -46,12 +47,12 @@ export default function SlidePreviewGrid({
                 ? "border-gray-900 ring-2 ring-gray-900/20"
                 : "border-gray-200 hover:border-gray-400"
             }`}
-            style={{ width: THUMB_SIZE, height: THUMB_SIZE }}
+            style={{ width: THUMB_WIDTH, height: THUMB_HEIGHT }}
           >
             <div
               style={{
-                width: SLIDE_SIZE,
-                height: SLIDE_SIZE,
+                width: SLIDE_WIDTH,
+                height: SLIDE_HEIGHT,
                 transform: `scale(${scale})`,
                 transformOrigin: "top left",
               }}
