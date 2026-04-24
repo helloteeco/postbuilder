@@ -386,7 +386,7 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             width: SLIDE_WIDTH,
             height: SLIDE_HEIGHT,
             background: palette.bg,
-            padding: "280px 80px 120px",
+            padding: "280px 80px 240px",
             boxSizing: "border-box",
             fontFamily:
               "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
