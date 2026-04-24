@@ -386,7 +386,7 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             width: SLIDE_WIDTH,
             height: SLIDE_HEIGHT,
             background: palette.bg,
-            padding: "260px 80px 380px",
+            padding: "240px 80px 380px",
             boxSizing: "border-box",
             fontFamily:
               "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -401,7 +401,10 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             outlineOffset: -4,
           }}
         >
-          <div>
+          {/* Hard cap on hook+subtitle height so they can never touch the
+              profile. Container inner height is 1350 - 240 - 380 = 730px.
+              Profile is ~140px; reserving ≥80px gap → hook cap of 510. */}
+          <div style={{ maxHeight: 510, overflow: "hidden" }}>
             <div
               style={{
                 fontSize: 132,
