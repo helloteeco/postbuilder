@@ -390,6 +390,7 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
           fontFamily:
             "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
           color: "#0F1419",
+          textAlign: "left",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
