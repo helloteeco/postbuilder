@@ -56,6 +56,7 @@ export default function PostBuilder() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [igStatus, setIgStatus] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Hidden full-size render targets for PNG export. Each ref is 1080x1350 (4:5 portrait).
   const exportRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -193,13 +194,83 @@ export default function PostBuilder() {
             Paste a competitor post → get your carousel in your template.
           </p>
         </div>
-        <ExportBar
-          slideCount={slides.length}
-          getSlideNodes={() =>
-            exportRefs.current.filter((n): n is HTMLDivElement => !!n)
-          }
-        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowHelp(true)}
+            className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            How to use
+          </button>
+          <ExportBar
+            slideCount={slides.length}
+            getSlideNodes={() =>
+              exportRefs.current.filter((n): n is HTMLDivElement => !!n)
+            }
+          />
+        </div>
       </header>
+
+      {showHelp && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900">How to use the Post Builder</h2>
+              <button
+                type="button"
+                onClick={() => setShowHelp(false)}
+                className="rounded px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
+              >
+                Close
+              </button>
+            </div>
+            <ol className="list-decimal space-y-3 pl-5 text-sm text-gray-700">
+              <li>
+                <span className="font-semibold text-gray-900">Set up your profile (one-time).</span>{" "}
+                Open the Profile panel on the left, upload your avatar photo, type
+                your display name and handle, and toggle the verified check if
+                you want it. Saved automatically — only do this once.
+              </li>
+              <li>
+                <span className="font-semibold text-gray-900">Pick your inputs.</span>{" "}
+                In the Input panel pick a tab: <em>Screenshots</em> (drop a competitor
+                post image), <em>Paste text</em> (write or paste long-form copy),{" "}
+                <em>Instagram URL</em> (we&apos;ll resolve it), or <em>Topic</em> (give
+                Claude an angle and let it write from scratch).
+              </li>
+              <li>
+                <span className="font-semibold text-gray-900">Hit Generate.</span>{" "}
+                Claude rewrites your input into 6-10 short, punchy slides at a
+                3rd-grade reading level. Slide 1 is always a big cover hook;
+                final slide is always a CTA.
+              </li>
+              <li>
+                <span className="font-semibold text-gray-900">Tweak any slide.</span>{" "}
+                Click a slide in the grid → edit the copy in the right-side
+                editor. For the cover slide you can also pick a background:
+                White, Yellow, Dark, Cream, Forest, or Navy. Bold accent
+                color is automatic.
+              </li>
+              <li>
+                <span className="font-semibold text-gray-900">Download.</span>{" "}
+                Hit <em>Download all (zip)</em> to grab every slide as a 1080×1350
+                PNG, or <em>Download each</em> to save them one at a time. Caption
+                + 3 hook variations are in the right column for copy-paste into
+                Instagram.
+              </li>
+            </ol>
+            <div className="mt-5 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              <span className="font-semibold">Tip:</span> Every cover background option is contrast-tested for legibility, so pick whichever matches your brand or the post&apos;s mood.
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">

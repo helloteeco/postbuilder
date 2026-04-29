@@ -12,9 +12,15 @@ export type SlideType =
   | "cta"; // closing DM call-to-action
 
 // Cover-slide background option. Drives bg color + text color in the
-// hook-opener renderer. "white" = dark text on white, "yellow" = dark
-// text on signature yellow, "dark" = white text on near-black.
-export type CoverBg = "white" | "yellow" | "dark";
+// hook-opener renderer. Each option is a brand-tested combo with WCAG-AA
+// (or better) contrast for body text and accent bold.
+export type CoverBg =
+  | "white"  // crisp / corporate
+  | "yellow" // signature brand yellow, dark text
+  | "dark"   // near-black, white text — high impact
+  | "cream"  // warm soft, terracotta accent
+  | "forest" // deep green, amber accent
+  | "navy";  // premium navy, coral accent
 
 export interface HookOpenerSlide {
   type: "hook-opener";

@@ -62,7 +62,13 @@ CARDINAL RULES — follow without exception:
 11. Numbers should feel specific, not rounded ($75,940 > "about $76K"). If the source gives a vague number, keep it vague — do not fabricate.
 
 SLIDE TYPES (use the matching \`type\` field):
-- "hook-opener": { headline: string; subtitle?: string; bg?: "white" | "yellow" | "dark" }   // COVER slide, slide 1 only. Just headline + optional one-line subtitle. Omit items/footer. You may pick bg: "white" (default), "yellow" (bright brand yellow), or "dark" (black bg, white text) based on the hook's energy — use "yellow" for celebratory/money hooks, "dark" for serious/contrarian hooks, "white" otherwise.
+- "hook-opener": { headline: string; subtitle?: string; bg?: "white" | "yellow" | "dark" | "cream" | "forest" | "navy" }   // COVER slide, slide 1 only. Just headline + optional one-line subtitle. Omit items/footer. Pick bg based on the hook's energy — every option is contrast-tuned so text is always legible:
+//   • "white"  — crisp, default, neutral hooks
+//   • "yellow" — celebratory / money / wealth-positive hooks
+//   • "dark"   — contrarian / "nobody talks about this" / serious hooks
+//   • "cream"  — warm storytelling / lifestyle hooks (terracotta accent)
+//   • "forest" — nature / patient-investor / long-term hooks (amber accent)
+//   • "navy"   — premium / authority / numbers-driven hooks (coral accent)
 - "personal-story": { paragraphs: string[] }   // 2-5 short paragraphs, **bold** allowed
 - "criteria-bullets": { heading: string; bullets: string[]; footer?: string }
 - "market-detail": { rank: number; title: string; subtitle?: string; bullets: string[]; stats?: {label: string; value: string}[] }

@@ -119,11 +119,18 @@ export default function SlideEditor({
           />
           <div>
             <div className="mb-1.5 text-xs text-gray-600">Background</div>
-            <div className="flex gap-2">
-              {(["white", "yellow", "dark"] as CoverBg[]).map((bg) => {
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { bg: "white", swatch: "#FFFFFF" },
+                  { bg: "yellow", swatch: "#F5B935" },
+                  { bg: "dark", swatch: "#0F1419" },
+                  { bg: "cream", swatch: "#F7F0E1" },
+                  { bg: "forest", swatch: "#1B3A2F" },
+                  { bg: "navy", swatch: "#0F2645" },
+                ] as { bg: CoverBg; swatch: string }[]
+              ).map(({ bg, swatch }) => {
                 const active = (slide.bg ?? "white") === bg;
-                const swatch =
-                  bg === "white" ? "#FFFFFF" : bg === "yellow" ? "#F5B935" : "#0F1419";
                 return (
                   <button
                     key={bg}
@@ -142,7 +149,10 @@ export default function SlideEditor({
                         height: 14,
                         borderRadius: 3,
                         background: swatch,
-                        border: bg === "white" ? "1px solid #D1D5DB" : "none",
+                        border:
+                          bg === "white" || bg === "cream"
+                            ? "1px solid #D1D5DB"
+                            : "none",
                       }}
                     />
                     <span className="capitalize">{bg}</span>

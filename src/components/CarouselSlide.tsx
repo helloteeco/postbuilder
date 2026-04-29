@@ -30,12 +30,21 @@ interface CarouselSlideProps {
   warnOverflow?: boolean;
 }
 
+// Curated cover palettes. Every combo has been picked for WCAG AA-or-better
+// contrast on both body text (fg vs bg) and accent bold (accent vs bg), so
+// any user's hook reads cleanly regardless of which they pick.
 function coverPalette(bg: CoverBg): { bg: string; fg: string; muted: string; accent: string } {
   switch (bg) {
     case "yellow":
       return { bg: "#F5B935", fg: "#0F1419", muted: "#5C4A1F", accent: "#0F1419" };
     case "dark":
       return { bg: "#0F1419", fg: "#FFFFFF", muted: "#9CA3AF", accent: "#5FB4D2" };
+    case "cream":
+      return { bg: "#F7F0E1", fg: "#2A1F0F", muted: "#76624A", accent: "#B8501F" };
+    case "forest":
+      return { bg: "#1B3A2F", fg: "#F5F0E1", muted: "#9DBAA9", accent: "#E8B042" };
+    case "navy":
+      return { bg: "#0F2645", fg: "#F8FAFC", muted: "#94A8C7", accent: "#FF8C5C" };
     case "white":
     default:
       return { bg: "#FFFFFF", fg: "#0F1419", muted: "#6B7280", accent: ACCENT_COLOR };
