@@ -287,10 +287,31 @@ export default function PostBuilder() {
                     slide is always a CTA.
                   </li>
                   <li>
-                    <span className="font-semibold text-gray-900">Tweak any slide.</span>{" "}
-                    Click a slide in the grid → edit the copy in the right-side editor.
-                    For the cover slide you can also pick a background: White, Yellow,
-                    Dark, Cream, Forest, or Navy. Bold accent color is automatic.
+                    <span className="font-semibold text-gray-900">Click any slide to edit it.</span>{" "}
+                    Tap a thumbnail in the preview grid (top of the right column) — that
+                    slide&apos;s fields show up in the editor below it. Edit the headline,
+                    bullets, paragraphs, etc., and the preview updates live. Use the{" "}
+                    <em>↑ ↓</em> buttons to reorder slides or <em>Delete</em> to remove
+                    one.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-gray-900">Bold key words with{" "}
+                      <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">**word**</code>.
+                    </span>{" "}
+                    Wrap a word or phrase in double asterisks and it renders bold + in
+                    your accent color (teal on white, amber on forest, coral on navy,
+                    etc.) on the slide.{" "}
+                    <em>Example:</em>{" "}
+                    typing <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">homes under **$300K**</code>{" "}
+                    makes <strong>$300K</strong> stand out. Claude does this automatically
+                    on every slide, but you can add or remove your own anywhere. The asterisks{" "}
+                    <strong>never appear in the downloaded PNG</strong> — they&apos;re just markers.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-gray-900">Cover-only: pick a background.</span>{" "}
+                    On slide 1 the editor shows 6 swatches: White, Yellow, Dark, Cream,
+                    Forest, Navy. Click any to switch — bold accent color auto-recolors
+                    to stay legible on that bg.
                   </li>
                   <li>
                     <span className="font-semibold text-gray-900">Download.</span>{" "}
@@ -301,7 +322,7 @@ export default function PostBuilder() {
                   </li>
                 </ol>
                 <div className="mt-5 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                  <span className="font-semibold">Tip:</span> Every cover background option is contrast-tested for legibility, so pick whichever matches your brand or the post&apos;s mood.
+                  <span className="font-semibold">Tip:</span> Every cover background option is contrast-tested for legibility, so pick whichever matches your brand or the post&apos;s mood. Bold 2-4 words per slide max — any more and the accent color loses its punch.
                 </div>
               </>
             )}
