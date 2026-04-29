@@ -123,6 +123,18 @@ export const DEFAULT_PROFILE: PostBuilderProfile = {
 export const LS_KEY_PROFILE = "postBuilder.profile";
 export const LS_KEY_PARAMS = "postBuilder.params";
 export const LS_KEY_LAST_POST = "postBuilder.lastPost";
+export const LS_KEY_SAVED_PROFILES = "postBuilder.savedProfiles";
+
+// Max number of saved-profile snapshots stored in localStorage. Keeps the
+// dropdown short and bounds the bytes consumed by avatar data URLs.
+export const SAVED_PROFILE_LIMIT = 5;
+
+// One entry in the saved-profiles list. label is the user's free-form name
+// for this snapshot (defaults to displayName); savedAt is for sort order.
+export interface SavedProfile extends PostBuilderProfile {
+  label: string;
+  savedAt: number;
+}
 
 export function normalizeHandle(h: string): string {
   const trimmed = h.trim();

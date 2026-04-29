@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_PROFILE,
   LS_KEY_PROFILE,
+  LS_KEY_SAVED_PROFILES,
+  SAVED_PROFILE_LIMIT,
   normalizeHandle,
   type PostBuilderProfile,
+  type SavedProfile,
 } from "@/lib/post-templates";
 
 interface Props {
@@ -13,9 +16,32 @@ interface Props {
   onChange: (next: PostBuilderProfile) => void;
 }
 
+function loadSavedProfiles(): SavedProfile[] {
+  try {
+    const raw = localStorage.getItem(LS_KEY_SAVED_PROFILES);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as SavedProfile[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((p) => p && typeof p.displayName === "string")
+      .sort((a, b) => b.savedAt - a.savedAt);
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedProfiles(list: SavedProfile[]) {
+  try {
+    localStorage.setItem(LS_KEY_SAVED_PROFILES, JSON.stringify(list));
+  } catch {
+    // ignore (likely quota exceeded — heavy avatar payload)
+  }
+}
+
 export default function ProfileEditor({ profile, onChange }: Props) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState<SavedProfile[]>([]);
 
   useEffect(() => {
     try {
@@ -24,6 +50,7 @@ export default function ProfileEditor({ profile, onChange }: Props) {
     } catch {
       // ignore
     }
+    setSaved(loadSavedProfiles());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -50,9 +77,64 @@ export default function ProfileEditor({ profile, onChange }: Props) {
     reader.readAsDataURL(file);
   }
 
+  function saveCurrent() {
+    if (!profile.displayName.trim()) return;
+    // De-dupe by displayName+handle so re-saving the same persona updates
+    // its timestamp instead of stacking duplicates.
+    const key = `${profile.displayName}|${profile.handle}`;
+    const without = saved.filter(
+      (s) => `${s.displayName}|${s.handle}` !== key,
+    );
+    const entry: SavedProfile = {
+      ...profile,
+      label: profile.displayName.trim(),
+      savedAt: Date.now(),
+    };
+    const next = [entry, ...without].slice(0, SAVED_PROFILE_LIMIT);
+    setSaved(next);
+    persistSavedProfiles(next);
+  }
+
+  function loadSaved(s: SavedProfile) {
+    const next: PostBuilderProfile = {
+      displayName: s.displayName,
+      handle: s.handle,
+      avatarDataUrl: s.avatarDataUrl,
+      verified: s.verified,
+    };
+    onChange(next);
+    try {
+      localStorage.setItem(LS_KEY_PROFILE, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  }
+
+  function deleteSaved(label: string, handle: string) {
+    const next = saved.filter(
+      (s) => !(s.label === label && s.handle === handle),
+    );
+    setSaved(next);
+    persistSavedProfiles(next);
+  }
+
+  const currentKey = `${profile.displayName}|${profile.handle}`;
+
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="mb-3 text-sm font-semibold text-gray-700">Profile</div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm font-semibold text-gray-700">Profile</div>
+        <button
+          type="button"
+          onClick={saveCurrent}
+          disabled={!profile.displayName.trim()}
+          className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-40"
+          title="Save current profile so you can switch back to it later"
+        >
+          Save profile
+        </button>
+      </div>
+
       <div className="flex items-center gap-4">
         <button
           type="button"
@@ -110,6 +192,65 @@ export default function ProfileEditor({ profile, onChange }: Props) {
           </label>
         </div>
       </div>
+
+      {saved.length > 0 && (
+        <div className="mt-4 border-t border-gray-100 pt-3">
+          <div className="mb-2 text-xs font-medium text-gray-600">
+            Saved profiles
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {saved.map((s) => {
+              const isActive = `${s.displayName}|${s.handle}` === currentKey;
+              return (
+                <div
+                  key={`${s.label}|${s.handle}|${s.savedAt}`}
+                  className={`group flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs transition ${
+                    isActive
+                      ? "border-gray-900 bg-gray-900 text-white"
+                      : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => loadSaved(s)}
+                    className="flex items-center gap-1.5"
+                    title={`Load ${s.label} (${s.handle})`}
+                  >
+                    {s.avatarDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={s.avatarDataUrl}
+                        alt=""
+                        className="h-5 w-5 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-yellow-600 text-[10px] font-bold text-white">
+                        {s.displayName.charAt(0).toUpperCase() || "?"}
+                      </span>
+                    )}
+                    <span className="max-w-[120px] truncate">{s.label}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteSaved(s.label, s.handle)}
+                    className={`rounded-full px-1 text-[11px] leading-none ${
+                      isActive
+                        ? "text-white/70 hover:text-white"
+                        : "text-gray-400 hover:text-gray-700"
+                    }`}
+                    title="Remove from saved"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-1.5 text-[11px] text-gray-400">
+            Up to {SAVED_PROFILE_LIMIT} saved per browser. Click to switch, × to remove.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
