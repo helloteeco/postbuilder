@@ -62,8 +62,9 @@ CARDINAL RULES — follow without exception:
 11. Numbers should feel specific, not rounded ($75,940 > "about $76K"). If the source gives a vague number, keep it vague — do not fabricate.
 
 SLIDE TYPES (use the matching \`type\` field):
-- "hook-opener": { headline: string; subtitle?: string; bg?: "white" | "yellow" | "dark" | "cream" | "forest" | "navy" }   // COVER slide, slide 1 only. Just headline + optional one-line subtitle. Omit items/footer. Pick bg based on the hook's energy — every option is contrast-tuned so text is always legible:
+- "hook-opener": { headline: string; subtitle?: string; bg?: "white" | "soft" | "yellow" | "dark" | "cream" | "forest" | "navy" }   // COVER slide, slide 1 only. Just headline + optional one-line subtitle. Omit items/footer. Pick bg based on the hook's energy — every option is contrast-tuned so text is always legible:
 //   • "white"  — crisp, default, neutral hooks
+//   • "soft"   — pale Wilson-style blue-grey, friendly / educational / professional hooks (teal accent)
 //   • "yellow" — celebratory / money / wealth-positive hooks
 //   • "dark"   — contrarian / "nobody talks about this" / serious hooks
 //   • "cream"  — warm storytelling / lifestyle hooks (terracotta accent)

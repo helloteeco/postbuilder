@@ -123,6 +123,7 @@ export default function SlideEditor({
               {(
                 [
                   { bg: "white", swatch: "#FFFFFF" },
+                  { bg: "soft", swatch: "#EEF2F6" },
                   { bg: "yellow", swatch: "#F5B935" },
                   { bg: "dark", swatch: "#0F1419" },
                   { bg: "cream", swatch: "#F7F0E1" },
@@ -150,7 +151,7 @@ export default function SlideEditor({
                         borderRadius: 3,
                         background: swatch,
                         border:
-                          bg === "white" || bg === "cream"
+                          bg === "white" || bg === "cream" || bg === "soft"
                             ? "1px solid #D1D5DB"
                             : "none",
                       }}

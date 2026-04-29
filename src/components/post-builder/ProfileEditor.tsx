@@ -8,6 +8,7 @@ import {
   SAVED_PROFILE_LIMIT,
   normalizeHandle,
   type PostBuilderProfile,
+  type ProfileFont,
   type SavedProfile,
 } from "@/lib/post-templates";
 
@@ -101,6 +102,7 @@ export default function ProfileEditor({ profile, onChange }: Props) {
       handle: s.handle,
       avatarDataUrl: s.avatarDataUrl,
       verified: s.verified,
+      font: s.font ?? "sans",
     };
     onChange(next);
     try {
@@ -191,6 +193,33 @@ export default function ProfileEditor({ profile, onChange }: Props) {
             Show verified check
           </label>
         </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 text-xs text-gray-600">
+        <span>Font:</span>
+        {(["sans", "serif"] as ProfileFont[]).map((f) => {
+          const active = (profile.font ?? "sans") === f;
+          return (
+            <button
+              key={f}
+              type="button"
+              onClick={() => update({ font: f })}
+              className={`rounded border px-2 py-0.5 transition ${
+                active
+                  ? "border-gray-900 bg-gray-900 text-white"
+                  : "border-gray-300 text-gray-700 hover:bg-gray-100"
+              }`}
+              style={{
+                fontFamily:
+                  f === "serif"
+                    ? "'Lora', Georgia, serif"
+                    : "'Inter', sans-serif",
+              }}
+            >
+              {f === "serif" ? "Serif (Wilson-style)" : "Sans (Jeff-style)"}
+            </button>
+          );
+        })}
       </div>
 
       {saved.length > 0 && (

@@ -45,10 +45,21 @@ function coverPalette(bg: CoverBg): { bg: string; fg: string; muted: string; acc
       return { bg: "#1B3A2F", fg: "#F5F0E1", muted: "#9DBAA9", accent: "#E8B042" };
     case "navy":
       return { bg: "#0F2645", fg: "#F8FAFC", muted: "#94A8C7", accent: "#FF8C5C" };
+    case "soft":
+      return { bg: "#EEF2F6", fg: "#0F1419", muted: "#6B7280", accent: "#3290B5" };
     case "white":
     default:
       return { bg: "#FFFFFF", fg: "#0F1419", muted: "#6B7280", accent: ACCENT_COLOR };
   }
+}
+
+const FONT_SANS =
+  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+const FONT_SERIF =
+  "'Lora', Georgia, 'Times New Roman', serif";
+
+function fontFamilyFor(profile: PostBuilderProfile): string {
+  return profile.font === "serif" ? FONT_SERIF : FONT_SANS;
 }
 
 // Render **bold** / *emphasis* spans inline, with the accent color applied.
@@ -397,8 +408,7 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             background: palette.bg,
             padding: "240px 80px 380px",
             boxSizing: "border-box",
-            fontFamily:
-              "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+            fontFamily: fontFamilyFor(profile),
             color: palette.fg,
             textAlign: "left",
             overflowWrap: "break-word",
@@ -456,8 +466,7 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
           background: "#FFFFFF",
           padding: "80px 80px",
           boxSizing: "border-box",
-          fontFamily:
-            "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          fontFamily: fontFamilyFor(profile),
           color: "#0F1419",
           textAlign: "left",
           overflowWrap: "break-word",

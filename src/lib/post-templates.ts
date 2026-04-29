@@ -20,7 +20,12 @@ export type CoverBg =
   | "dark"   // near-black, white text — high impact
   | "cream"  // warm soft, terracotta accent
   | "forest" // deep green, amber accent
-  | "navy";  // premium navy, coral accent
+  | "navy"   // premium navy, coral accent
+  | "soft";  // pale blue, Wilson-style — teal accent
+
+// Typography toggle on the user's profile. Drives fontFamily across all
+// slides so the brand voice stays consistent (Wilson = serif, Jeff = sans).
+export type ProfileFont = "sans" | "serif";
 
 export interface HookOpenerSlide {
   type: "hook-opener";
@@ -88,6 +93,7 @@ export interface PostBuilderProfile {
   handle: string; // "@jeffchheuy" (leading @ optional, we normalize)
   avatarDataUrl: string | null; // uploaded image as data URL, persisted to localStorage
   verified: boolean; // show the blue check
+  font?: ProfileFont; // sans (default) or serif — applies to every slide
 }
 
 export interface PostBuilderParams {
@@ -117,6 +123,7 @@ export const DEFAULT_PROFILE: PostBuilderProfile = {
   handle: "@jeffchheuy",
   avatarDataUrl: null,
   verified: true,
+  font: "sans",
 };
 
 // Local-storage keys
