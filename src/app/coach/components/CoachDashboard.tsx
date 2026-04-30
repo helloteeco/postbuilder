@@ -6,14 +6,16 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import HookFormulas from "@/app/coach/components/HookFormulas";
 import PerformanceTracker from "@/app/coach/components/PerformanceTracker";
 import PillarReference from "@/app/coach/components/PillarReference";
+import PillarsScheduleEditor from "@/app/coach/components/PillarsScheduleEditor";
 import PromptBuilder from "@/app/coach/components/PromptBuilder";
 import TodaysPlan from "@/app/coach/components/TodaysPlan";
 import WeekCalendar from "@/app/coach/components/WeekCalendar";
 import type { Slot } from "@/app/coach/lib/strategy";
+import { installCustomData } from "@/app/coach/lib/customization";
 
 export interface SelectedSlot {
   // Stored as ISO date-only string (yyyy-mm-dd) so it round-trips cleanly
@@ -24,11 +26,20 @@ export interface SelectedSlot {
 
 export default function CoachDashboard() {
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  // Bumped after a save to force child sections (which read from
+  // getEffectivePillars at render time) to recompute.
+  const [revision, setRevision] = useState(0);
+
+  // Install any saved custom pillars / schedule on mount before the rest of
+  // the dashboard reads from getEffectivePillars / getEffectiveRotation.
+  useEffect(() => {
+    installCustomData();
+    setRevision((v) => v + 1);
+  }, []);
 
   function handleSelectSlot(s: SelectedSlot) {
     setSelectedSlot(s);
-    // Smooth-scroll the prompt builder into view so the user sees their
-    // selection take effect.
     if (typeof document !== "undefined") {
       const el = document.getElementById("coach-prompt-builder");
       if (el) {
@@ -37,19 +48,41 @@ export default function CoachDashboard() {
     }
   }
 
+  function handleEditorSaved() {
+    installCustomData();
+    setRevision((v) => v + 1);
+  }
+
   return (
     <>
-      <PromptBuilder selectedSlot={selectedSlot} />
-      <TodaysPlan />
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setEditorOpen(true)}
+          className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+        >
+          Customize pillars &amp; schedule
+        </button>
+      </div>
+
+      <PromptBuilder key={`pb-${revision}`} selectedSlot={selectedSlot} />
+      <TodaysPlan key={`tp-${revision}`} />
       <WeekCalendar
+        key={`wc-${revision}`}
         selectedSlot={selectedSlot}
         onSelectSlot={handleSelectSlot}
       />
       <PerformanceTracker />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <HookFormulas />
-        <PillarReference />
+        <PillarReference key={`pr-${revision}`} />
       </div>
+
+      <PillarsScheduleEditor
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        onSaved={handleEditorSaved}
+      />
     </>
   );
 }

@@ -4,7 +4,7 @@
 "use client";
 
 import { useState } from "react";
-import { PILLARS, pillarColorClasses } from "@/app/coach/lib/strategy";
+import { getEffectivePillars, pillarColorClasses } from "@/app/coach/lib/strategy";
 
 export default function PillarReference() {
   const [open, setOpen] = useState(false);
@@ -24,7 +24,7 @@ export default function PillarReference() {
       </button>
       {open && (
         <ul className="mt-4 space-y-3 text-sm">
-          {PILLARS.map((p) => {
+          {getEffectivePillars().map((p) => {
             const colors = pillarColorClasses(p.color);
             return (
               <li key={p.id} className="flex gap-3">

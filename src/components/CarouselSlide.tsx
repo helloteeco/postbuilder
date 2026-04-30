@@ -33,7 +33,40 @@ interface CarouselSlideProps {
 // Curated cover palettes. Every combo has been picked for WCAG AA-or-better
 // contrast on both body text (fg vs bg) and accent bold (accent vs bg), so
 // any user's hook reads cleanly regardless of which they pick.
-function coverPalette(bg: CoverBg): { bg: string; fg: string; muted: string; accent: string } {
+// Compute relative luminance of a hex color, per the WCAG formula. Used
+// to pick black-or-white text color so a custom bg always reads cleanly.
+function relativeLuminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 1; // unknown → assume light, fall back to dark text
+  const v = m[1];
+  const r = parseInt(v.slice(0, 2), 16) / 255;
+  const g = parseInt(v.slice(2, 4), 16) / 255;
+  const b = parseInt(v.slice(4, 6), 16) / 255;
+  const f = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+function customPalette(
+  customBg: string | undefined,
+  customAccent: string | undefined,
+): { bg: string; fg: string; muted: string; accent: string } {
+  const bgHex = customBg && /^#?[0-9a-f]{6}$/i.test(customBg.trim()) ? customBg.trim() : "#FFFFFF";
+  const normBg = bgHex.startsWith("#") ? bgHex : `#${bgHex}`;
+  const lum = relativeLuminance(normBg);
+  // Light bg → dark text; dark bg → light text. WCAG threshold ~0.5.
+  const isLightBg = lum > 0.5;
+  const fg = isLightBg ? "#0F1419" : "#FFFFFF";
+  const muted = isLightBg ? "#6B7280" : "#9CA3AF";
+  const accentHex = customAccent && /^#?[0-9a-f]{6}$/i.test(customAccent.trim()) ? customAccent.trim() : (isLightBg ? ACCENT_COLOR : "#5FB4D2");
+  const normAccent = accentHex.startsWith("#") ? accentHex : `#${accentHex}`;
+  return { bg: normBg, fg, muted, accent: normAccent };
+}
+
+function coverPalette(
+  bg: CoverBg,
+  customBg?: string,
+  customAccent?: string,
+): { bg: string; fg: string; muted: string; accent: string } {
   switch (bg) {
     case "yellow":
       return { bg: "#F5B935", fg: "#0F1419", muted: "#5C4A1F", accent: "#0F1419" };
@@ -47,6 +80,8 @@ function coverPalette(bg: CoverBg): { bg: string; fg: string; muted: string; acc
       return { bg: "#0F2645", fg: "#F8FAFC", muted: "#94A8C7", accent: "#FF8C5C" };
     case "soft":
       return { bg: "#EEF2F6", fg: "#0F1419", muted: "#6B7280", accent: "#3290B5" };
+    case "custom":
+      return customPalette(customBg, customAccent);
     case "white":
     default:
       return { bg: "#FFFFFF", fg: "#0F1419", muted: "#6B7280", accent: ACCENT_COLOR };
@@ -57,9 +92,23 @@ const FONT_SANS =
   "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 const FONT_SERIF =
   "'Lora', Georgia, 'Times New Roman', serif";
+const FONT_DISPLAY =
+  "'DM Serif Display', 'Lora', Georgia, serif";
+const FONT_ROUNDED =
+  "'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 function fontFamilyFor(profile: PostBuilderProfile): string {
-  return profile.font === "serif" ? FONT_SERIF : FONT_SANS;
+  switch (profile.font) {
+    case "serif":
+      return FONT_SERIF;
+    case "display":
+      return FONT_DISPLAY;
+    case "rounded":
+      return FONT_ROUNDED;
+    case "sans":
+    default:
+      return FONT_SANS;
+  }
 }
 
 // Render **bold** / *emphasis* spans inline, with the accent color applied.
@@ -398,7 +447,11 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
   function CarouselSlide({ slide, profile, warnOverflow }, ref) {
     // Cover layout: big hook at top, compact profile at bottom, bg color.
     if (slide.type === "hook-opener") {
-      const palette = coverPalette(slide.bg ?? "white");
+      const palette = coverPalette(
+        slide.bg ?? "white",
+        slide.customBg,
+        slide.customAccent,
+      );
       return (
         <div
           ref={ref}

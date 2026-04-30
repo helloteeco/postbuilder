@@ -15,17 +15,23 @@ export type SlideType =
 // hook-opener renderer. Each option is a brand-tested combo with WCAG-AA
 // (or better) contrast for body text and accent bold.
 export type CoverBg =
-  | "white"  // crisp / corporate
-  | "yellow" // signature brand yellow, dark text
-  | "dark"   // near-black, white text — high impact
-  | "cream"  // warm soft, terracotta accent
-  | "forest" // deep green, amber accent
-  | "navy"   // premium navy, coral accent
-  | "soft";  // pale blue, Wilson-style — teal accent
+  | "white"   // crisp / corporate
+  | "yellow"  // signature brand yellow, dark text
+  | "dark"    // near-black, white text — high impact
+  | "cream"   // warm soft, terracotta accent
+  | "forest"  // deep green, amber accent
+  | "navy"    // premium navy, coral accent
+  | "soft"    // pale blue, Wilson-style — teal accent
+  | "custom"; // user-picked bg + accent (auto-computed text color)
 
 // Typography toggle on the user's profile. Drives fontFamily across all
-// slides so the brand voice stays consistent (Wilson = serif, Jeff = sans).
-export type ProfileFont = "sans" | "serif";
+// slides so the brand voice stays consistent. Each option is intentionally
+// distinct so picking a font feels like picking a brand:
+//   - "sans"    Inter — clean modern (Jeff style)
+//   - "serif"   Lora — classic readable serif (Wilson style)
+//   - "display" DM Serif Display — high-contrast magazine serif (fashion / editorial)
+//   - "rounded" Nunito — friendly approachable rounded sans (lifestyle / coach)
+export type ProfileFont = "sans" | "serif" | "display" | "rounded";
 
 export interface HookOpenerSlide {
   type: "hook-opener";
@@ -34,6 +40,10 @@ export interface HookOpenerSlide {
   items?: string[]; // numbered preview list, rendered "1. ..." — optional
   footer?: string[]; // short closing paragraphs — optional
   bg?: CoverBg; // cover background; defaults to "white"
+  // Only used when bg === "custom". Both should be hex like "#1A2B3C".
+  // The text color is auto-computed from bg luminance for legibility.
+  customBg?: string;
+  customAccent?: string;
 }
 
 export interface PersonalStorySlide {

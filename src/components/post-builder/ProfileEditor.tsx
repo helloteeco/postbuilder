@@ -195,31 +195,35 @@ export default function ProfileEditor({ profile, onChange }: Props) {
         </div>
       </div>
 
-      <div className="mt-3 flex items-center gap-2 text-xs text-gray-600">
-        <span>Font:</span>
-        {(["sans", "serif"] as ProfileFont[]).map((f) => {
-          const active = (profile.font ?? "sans") === f;
-          return (
-            <button
-              key={f}
-              type="button"
-              onClick={() => update({ font: f })}
-              className={`rounded border px-2 py-0.5 transition ${
-                active
-                  ? "border-gray-900 bg-gray-900 text-white"
-                  : "border-gray-300 text-gray-700 hover:bg-gray-100"
-              }`}
-              style={{
-                fontFamily:
-                  f === "serif"
-                    ? "'Lora', Georgia, serif"
-                    : "'Inter', sans-serif",
-              }}
-            >
-              {f === "serif" ? "Serif (Wilson-style)" : "Sans (Jeff-style)"}
-            </button>
-          );
-        })}
+      <div className="mt-3">
+        <div className="mb-1.5 text-xs text-gray-600">Font (whole feed)</div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          {(
+            [
+              { id: "sans", label: "Sans (Jeff-style)", family: "'Inter', sans-serif" },
+              { id: "serif", label: "Serif (Wilson-style)", family: "'Lora', Georgia, serif" },
+              { id: "display", label: "Display (editorial)", family: "'DM Serif Display', serif" },
+              { id: "rounded", label: "Rounded (friendly)", family: "'Nunito', sans-serif" },
+            ] as { id: ProfileFont; label: string; family: string }[]
+          ).map(({ id, label, family }) => {
+            const active = (profile.font ?? "sans") === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => update({ font: id })}
+                className={`rounded border px-2 py-1 transition ${
+                  active
+                    ? "border-gray-900 bg-gray-900 text-white"
+                    : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                }`}
+                style={{ fontFamily: family }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {saved.length > 0 && (
