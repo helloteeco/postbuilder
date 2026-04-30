@@ -34,6 +34,44 @@ interface AnalyzeErr {
 }
 type AnalyzeResponse = AnalyzeOk | AnalyzeErr;
 
+// Resize + JPEG-encode a data URL so it fits in Vercel's 4.5MB body limit.
+// Defaults: max 1600px on the longest side, JPEG quality 0.85. iPhone PNG
+// screenshots (~5-10MB) come out around 200-500KB after this with no
+// visible quality loss for text-heavy carousel screenshots.
+async function compressImageDataUrl(
+  dataUrl: string,
+  maxDim = 1600,
+  quality = 0.85,
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const ratio = Math.min(maxDim / width, maxDim / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Canvas 2D context unavailable"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      try {
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    };
+    img.onerror = () => reject(new Error("Could not decode image"));
+    img.src = dataUrl;
+  });
+}
+
 interface IgOk {
   ok: true;
   result: { caption: string | null; imageUrls: string[]; author: string | null; source: string };
@@ -74,7 +112,21 @@ export default function PostBuilder() {
       const payload: Record<string, unknown> = { params };
       if (input.topic) payload.topic = input.topic;
       if (input.mode === "screenshots" && input.images.length > 0) {
-        payload.competitorImages = input.images;
+        // iPhone PNG screenshots run 5-10MB each. Vercel caps request bodies
+        // at 4.5MB, so compress every image client-side before sending:
+        // resize to max 1600px on the longest side and re-encode as JPEG.
+        // Cuts payload ~10-25× with no visible quality loss for screenshots.
+        try {
+          payload.competitorImages = await Promise.all(
+            input.images.map((d) => compressImageDataUrl(d)),
+          );
+        } catch (e) {
+          setError(
+            `Couldn't read one of the images: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          setBusy(false);
+          return;
+        }
       } else if (input.mode === "text" && input.text.trim()) {
         payload.competitorText = input.text.trim();
       } else if (input.mode === "raw" && input.raw.trim()) {
@@ -94,7 +146,26 @@ export default function PostBuilder() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await resp.json()) as AnalyzeResponse;
+
+      // The API can return non-JSON when Vercel intercepts (e.g. 413
+      // "Request Entity Too Large" comes back as plain text). Read raw
+      // text first and only parse if it looks like JSON.
+      const rawText = await resp.text();
+      if (!resp.ok) {
+        if (resp.status === 413 || /entity too large|payload too large/i.test(rawText)) {
+          setError("Those screenshots are too large even after compression. Try fewer images or take screenshots of just the relevant part.");
+        } else {
+          setError(`Server error ${resp.status}: ${rawText.slice(0, 200)}`);
+        }
+        return;
+      }
+      let data: AnalyzeResponse;
+      try {
+        data = JSON.parse(rawText) as AnalyzeResponse;
+      } catch {
+        setError("Server returned an unexpected response. Try again, or with fewer/smaller images.");
+        return;
+      }
       if (!data.ok) {
         setError(`${data.code}: ${data.message}`);
         return;
