@@ -83,11 +83,18 @@ export default function PerformanceTracker() {
       <h2 className="mb-1 text-lg font-bold text-gray-900">
         Performance tracker
       </h2>
-      <p className="mb-4 text-sm text-gray-600">
-        Log a post after publishing to see your save and share rates trend.
+      <p className="mb-2 text-sm text-gray-600">
         Targets: save rate ≥ {SAVE_RATE_TARGET}%, share rate ≥{" "}
-        {SHARE_RATE_TARGET}%.
+        {SHARE_RATE_TARGET}%. Every post you log here teaches Coach Mode what
+        works for your audience and reshapes future Claude prompts.
       </p>
+      <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+        <span className="font-semibold">When to log:</span> wait{" "}
+        <strong>7-14 days after posting</strong>. By then ~85% of saves and
+        shares have rolled in on Instagram, so the numbers stop moving and
+        the data is stable. Logging too early gives Coach Mode misleading
+        signal.
+      </div>
 
       <form
         onSubmit={onSubmit}
@@ -148,7 +155,7 @@ export default function PerformanceTracker() {
           />
         </label>
         <label className="text-xs text-gray-600 md:col-span-2">
-          Profile visits
+          Profile visits <span className="text-gray-400">(optional)</span>
           <input
             type="number"
             inputMode="numeric"
