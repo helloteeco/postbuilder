@@ -10,9 +10,10 @@ import { useEffect, useMemo, useState } from "react";
 import {
   HOOK_FORMULAS,
   LOCKED_POST_BUILDER_SETTINGS,
+  SLOT_POST_WINDOW,
   getDailyTopics,
-  getHookForDate,
-  getPillarForDate,
+  getHookForSlot,
+  getPillarForSlot,
   pillarColorClasses,
 } from "@/app/coach/lib/strategy";
 import {
@@ -23,6 +24,7 @@ import {
   shareRate,
   type CoachPost,
 } from "@/app/coach/lib/storage";
+import type { SelectedSlot } from "./CoachDashboard";
 
 interface CtaOption {
   keyword: string;
@@ -160,26 +162,51 @@ Section 2:
 …through Section 10.`;
 }
 
-export default function PromptBuilder() {
-  const today = new Date();
-  const todayPillar = getPillarForDate(today);
-  const todayHook = getHookForDate(today);
-  const todayTopics = useMemo(
-    () => getDailyTopics(today, todayPillar.id, 5),
-    [today, todayPillar.id],
+interface PromptBuilderProps {
+  // Optional override from WeekCalendar. When set, the prompt builder
+  // switches to that date+slot's pillar/hook/topics instead of "today AM".
+  selectedSlot?: SelectedSlot | null;
+}
+
+export default function PromptBuilder({ selectedSlot }: PromptBuilderProps = {}) {
+  // Resolve the active (date, slot) pair: either the user-clicked slot or
+  // today's AM by default.
+  const activeDate = useMemo(() => {
+    if (selectedSlot?.isoDate) {
+      // Parse "yyyy-mm-dd" as a local date (avoid the UTC midnight pitfall
+      // of new Date("yyyy-mm-dd") which can shift by a day).
+      const [y, m, d] = selectedSlot.isoDate.split("-").map(Number);
+      return new Date(y, (m ?? 1) - 1, d ?? 1);
+    }
+    return new Date();
+  }, [selectedSlot?.isoDate]);
+
+  const activeSlot = selectedSlot?.slot ?? "am";
+  const activePillar = getPillarForSlot(activeDate, activeSlot);
+  const activeHook = getHookForSlot(activeDate, activeSlot);
+
+  const dailyTopics = useMemo(
+    () => getDailyTopics(activeDate, activePillar.id, 5),
+    [activeDate, activePillar.id],
   );
 
-  const [topic, setTopic] = useState<string>(todayTopics[0] ?? "");
+  const [topic, setTopic] = useState<string>("");
   const [customTopic, setCustomTopic] = useState("");
-  const [hookId, setHookId] = useState<string>(todayHook.id);
+  const [hookId, setHookId] = useState<string>("");
   const [ctaKeyword, setCtaKeyword] = useState<string>(DEFAULT_CTAS[0].keyword);
   const [ctaPromise, setCtaPromise] = useState<string>(DEFAULT_CTAS[0].promise);
   const [copied, setCopied] = useState(false);
   const [posts, setPosts] = useState<CoachPost[]>([]);
 
+  // Reset topic + hook whenever the active slot changes — otherwise stale
+  // selections from a previous slot's pillar carry over.
+  useEffect(() => {
+    setTopic(dailyTopics[0] ?? "");
+    setHookId(activeHook.id);
+  }, [activeDate, activeSlot, activeHook.id, dailyTopics]);
+
   // Pull the latest performance logs so the generated prompt is informed
-  // by what's actually working. Re-runs on mount and whenever this
-  // component is revealed (e.g. after the user navigates back from logging).
+  // by what's actually working.
   useEffect(() => {
     setPosts(loadPosts());
   }, []);
@@ -187,19 +214,19 @@ export default function PromptBuilder() {
   const learning = useMemo(() => pickLearningContext(posts), [posts]);
 
   const selectedHook =
-    HOOK_FORMULAS.find((h) => h.id === hookId) ?? todayHook;
+    HOOK_FORMULAS.find((h) => h.id === hookId) ?? activeHook;
   const finalTopic = topic === "__custom__" ? customTopic : topic;
-  const colors = pillarColorClasses(todayPillar.color);
+  const colors = pillarColorClasses(activePillar.color);
 
   const prompt = buildPrompt({
     topic: finalTopic || "(pick a topic above)",
-    pillarName: todayPillar.name,
-    pillarDescription: todayPillar.description,
+    pillarName: activePillar.name,
+    pillarDescription: activePillar.description,
     hookTemplate: selectedHook.template,
     ctaKeyword,
     ctaPromise,
     learning,
-    todayDate: today,
+    todayDate: activeDate,
   });
 
   async function copyPrompt() {
@@ -224,13 +251,29 @@ export default function PromptBuilder() {
     }
   }
 
+  const slotBadge = selectedSlot
+    ? `${activeDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · ${activeSlot.toUpperCase()} (${SLOT_POST_WINDOW[activeSlot]})`
+    : `Today · AM (${SLOT_POST_WINDOW.am})`;
+
   return (
     <section
+      id="coach-prompt-builder"
       className={`rounded-xl border-2 ${colors.border} bg-white p-6 shadow-sm`}
     >
-      <div className="mb-1 flex items-center justify-between">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
           Step 1 — Generate the long-form copy
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full ${colors.bgSoft} ${colors.text} px-2.5 py-0.5 text-xs font-medium`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${colors.bg}`}
+              aria-hidden
+            />
+            {slotBadge}
+          </span>
         </div>
       </div>
       <h2 className="mb-1 text-xl font-bold text-gray-900">
@@ -239,7 +282,9 @@ export default function PromptBuilder() {
       <p className="mb-5 text-sm text-gray-600">
         Pick a topic and CTA, copy the prompt, paste it into Claude.ai. Paste
         the response into the Post Builder&apos;s <em>Paste text</em> tab and
-        you&apos;ll have a 10-slide carousel in 30 seconds.
+        you&apos;ll have a 10-slide carousel in 30 seconds. Click any slot in
+        the 7-day calendar below to switch this prompt to that day&apos;s
+        pillar and hook.
       </p>
 
       <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -250,7 +295,7 @@ export default function PromptBuilder() {
             onChange={(e) => setTopic(e.target.value)}
             className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
           >
-            {todayTopics.map((t) => (
+            {dailyTopics.map((t: string) => (
               <option key={t} value={t}>
                 {t}
               </option>
@@ -277,7 +322,7 @@ export default function PromptBuilder() {
           >
             {HOOK_FORMULAS.map((h) => (
               <option key={h.id} value={h.id}>
-                {h.id === todayHook.id ? "★ " : ""}
+                {h.id === activeHook.id ? "★ " : ""}
                 {h.template}
               </option>
             ))}

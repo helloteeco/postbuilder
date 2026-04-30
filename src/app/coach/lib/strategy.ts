@@ -58,21 +58,51 @@ export function getPillarById(id: string): Pillar | undefined {
   return PILLARS.find((p) => p.id === id);
 }
 
-// JS Date.getDay() returns 0=Sun, 1=Mon, … 6=Sat. Map each to a pillar id
-// per the spec.
-const DAY_TO_PILLAR_ID: Record<number, string> = {
-  1: "tax-money",       // Mon
-  2: "market-deal",     // Tue
-  3: "client-wins",     // Wed
-  4: "ops-systems",     // Thu
-  5: "tax-money",       // Fri (second Tax post)
-  6: "market-deal",     // Sat (second Market post)
-  0: "personal-story",  // Sun
+// "am" = primary post (~8-10 AM), "pm" = optional second post (~6-9 PM).
+// Spaced 8-12 hours apart, well within the 6-18 hour gap that keeps two
+// daily posts from cannibalizing each other's reach.
+export type Slot = "am" | "pm";
+
+export const SLOT_POST_WINDOW: Record<Slot, string> = {
+  am: "8-10 AM",
+  pm: "6-9 PM",
 };
 
-export function getPillarForDate(date: Date): Pillar {
-  const id = DAY_TO_PILLAR_ID[date.getDay()] ?? "personal-story";
+// JS Date.getDay() returns 0=Sun, 1=Mon, … 6=Sat. Map each day to its
+// primary (AM) and secondary (PM) pillar. Secondary is intentionally
+// different from primary so a 2x/day creator doesn't post the same
+// pillar back-to-back, and the week as a whole hits each pillar 2-3
+// times across the 14 slots.
+const DAY_TO_AM_PILLAR: Record<number, string> = {
+  1: "tax-money",       // Mon AM
+  2: "market-deal",     // Tue AM
+  3: "client-wins",     // Wed AM
+  4: "ops-systems",     // Thu AM
+  5: "tax-money",       // Fri AM (second Tax post of the week)
+  6: "market-deal",     // Sat AM (second Market post of the week)
+  0: "personal-story",  // Sun AM
+};
+
+const DAY_TO_PM_PILLAR: Record<number, string> = {
+  1: "personal-story",  // Mon PM
+  2: "ops-systems",     // Tue PM
+  3: "market-deal",     // Wed PM
+  4: "client-wins",     // Thu PM
+  5: "personal-story",  // Fri PM
+  6: "client-wins",     // Sat PM
+  0: "ops-systems",     // Sun PM
+};
+
+export function getPillarForSlot(date: Date, slot: Slot): Pillar {
+  const map = slot === "am" ? DAY_TO_AM_PILLAR : DAY_TO_PM_PILLAR;
+  const id = map[date.getDay()] ?? "personal-story";
   return getPillarById(id) ?? PILLARS[0];
+}
+
+// Backwards-compatible alias used by Section A (Today's Plan) — defaults
+// to the primary AM slot.
+export function getPillarForDate(date: Date): Pillar {
+  return getPillarForSlot(date, "am");
 }
 
 export interface HookFormula {
@@ -124,6 +154,17 @@ export function getHookForDate(date: Date): HookFormula {
   if (day === 4) return HOOK_FORMULAS[3];
   // Fri/Sat/Sun → counter-truth
   return HOOK_FORMULAS[4];
+}
+
+// Hook formula for a (date, slot) pair. AM uses the day's normal hook;
+// PM rotates +2 in the formula list so the same day's two posts don't
+// share a hook structure.
+export function getHookForSlot(date: Date, slot: Slot): HookFormula {
+  const am = getHookForDate(date);
+  if (slot === "am") return am;
+  const amIndex = HOOK_FORMULAS.findIndex((h) => h.id === am.id);
+  const pmIndex = (amIndex + 2) % HOOK_FORMULAS.length;
+  return HOOK_FORMULAS[pmIndex];
 }
 
 // Topic banks — exact list from the spec.
@@ -282,11 +323,12 @@ export function pillarColorClasses(color: string): {
   }
 }
 
-// Builds the next N days starting at `start`, each tagged with the pillar
-// it'll cover. Used by the 7-day calendar.
+// Builds the next N days starting at `start`, each tagged with both
+// AM and PM pillar assignments. Used by the 7-day calendar.
 export interface DayPlan {
   date: Date;
-  pillar: Pillar;
+  amPillar: Pillar;
+  pmPillar: Pillar;
   isToday: boolean;
 }
 
@@ -300,7 +342,8 @@ export function getNextDays(start: Date, count = 7): DayPlan[] {
     d.setDate(d.getDate() + i);
     out.push({
       date: d,
-      pillar: getPillarForDate(d),
+      amPillar: getPillarForSlot(d, "am"),
+      pmPillar: getPillarForSlot(d, "pm"),
       isToday: d.getTime() === today.getTime(),
     });
   }

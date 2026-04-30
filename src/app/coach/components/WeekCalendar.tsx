@@ -1,9 +1,22 @@
 // Section B of Coach Mode: a 7-day grid showing the next week's pillar
-// rotation. Today is highlighted.
+// rotation with TWO slots per day (AM / PM, ~6-12 hours apart). Clicking
+// any slot tells the PromptBuilder to switch to that date+slot+pillar.
 
 "use client";
 
-import { getNextDays, pillarColorClasses } from "@/app/coach/lib/strategy";
+import {
+  SLOT_POST_WINDOW,
+  getNextDays,
+  pillarColorClasses,
+  type Pillar,
+  type Slot,
+} from "@/app/coach/lib/strategy";
+import type { SelectedSlot } from "./CoachDashboard";
+
+interface Props {
+  selectedSlot: SelectedSlot | null;
+  onSelectSlot: (s: SelectedSlot) => void;
+}
 
 function dayName(d: Date): string {
   return d.toLocaleDateString(undefined, { weekday: "short" });
@@ -11,31 +24,82 @@ function dayName(d: Date): string {
 function shortDate(d: Date): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
-export default function WeekCalendar() {
+interface SlotButtonProps {
+  pillar: Pillar;
+  slot: Slot;
+  date: Date;
+  active: boolean;
+  onClick: () => void;
+}
+
+function SlotButton({ pillar, slot, date, active, onClick }: SlotButtonProps) {
+  const colors = pillarColorClasses(pillar.color);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`block w-full rounded border px-2 py-1.5 text-left transition ${
+        active
+          ? `${colors.border} ${colors.bgSoft} ring-2 ${colors.ring}`
+          : "border-gray-200 bg-white hover:bg-gray-50"
+      }`}
+      aria-label={`${slot.toUpperCase()} on ${shortDate(date)}: ${pillar.name}`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+          {slot.toUpperCase()}
+        </span>
+        <span className="text-[10px] text-gray-400">
+          {SLOT_POST_WINDOW[slot]}
+        </span>
+      </div>
+      <div className="mt-0.5 flex items-center gap-1.5">
+        <span
+          className={`h-2 w-2 flex-shrink-0 rounded-full ${colors.bg}`}
+          aria-hidden
+        />
+        <span className="text-xs leading-tight text-gray-800">
+          {pillar.name}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+export default function WeekCalendar({ selectedSlot, onSelectSlot }: Props) {
   const days = getNextDays(new Date(), 7);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="mb-1 text-lg font-bold text-gray-900">Next 7 days</h2>
       <p className="mb-4 text-sm text-gray-600">
-        Pillar rotation so you never wonder what to post tomorrow.
+        Two posts per day, AM and PM. AM is the primary; PM is optional but
+        keeps engagement up if you have the bandwidth. Click any slot to load
+        its pillar into the prompt builder above.
       </p>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-7">
         {days.map((d) => {
-          const colors = pillarColorClasses(d.pillar.color);
+          const iso = isoDate(d.date);
+          const amActive =
+            selectedSlot?.isoDate === iso && selectedSlot.slot === "am";
+          const pmActive =
+            selectedSlot?.isoDate === iso && selectedSlot.slot === "pm";
           return (
             <div
-              key={d.date.toISOString()}
-              className={`rounded-lg border p-3 text-left transition ${
+              key={iso}
+              className={`rounded-lg border p-2 ${
                 d.isToday
-                  ? `${colors.border} ${colors.bgSoft} ring-2 ${colors.ring}`
+                  ? "border-gray-900 bg-gray-50"
                   : "border-gray-200 bg-white"
               }`}
             >
-              <div className="flex items-baseline justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <div className="mb-2 flex items-baseline justify-between px-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-gray-700">
                   {dayName(d.date)}
                 </span>
                 {d.isToday && (
@@ -44,17 +108,28 @@ export default function WeekCalendar() {
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 text-sm font-medium text-gray-900">
+              <div className="mb-2 px-1 text-sm font-medium text-gray-900">
                 {shortDate(d.date)}
               </div>
-              <div className="mt-2 flex items-center gap-1.5">
-                <span
-                  className={`h-2 w-2 rounded-full ${colors.bg}`}
-                  aria-hidden
+              <div className="space-y-1.5">
+                <SlotButton
+                  pillar={d.amPillar}
+                  slot="am"
+                  date={d.date}
+                  active={amActive}
+                  onClick={() =>
+                    onSelectSlot({ isoDate: iso, slot: "am" })
+                  }
                 />
-                <span className="text-xs leading-tight text-gray-700">
-                  {d.pillar.name}
-                </span>
+                <SlotButton
+                  pillar={d.pmPillar}
+                  slot="pm"
+                  date={d.date}
+                  active={pmActive}
+                  onClick={() =>
+                    onSelectSlot({ isoDate: iso, slot: "pm" })
+                  }
+                />
               </div>
             </div>
           );
