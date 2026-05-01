@@ -285,6 +285,10 @@ export default function PostBuilder() {
             getSlideNodes={() =>
               exportRefs.current.filter((n): n is HTMLDivElement => !!n)
             }
+            selectedIndex={selectedIdx >= 0 ? selectedIdx : null}
+            getSelectedNode={() =>
+              selectedIdx >= 0 ? exportRefs.current[selectedIdx] ?? null : null
+            }
           />
         </div>
       </header>
