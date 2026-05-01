@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CarouselSlide, SLIDE_HEIGHT, SLIDE_WIDTH } from "@/components/CarouselSlide";
 import {
   DEFAULT_PARAMS,
@@ -11,12 +11,21 @@ import {
   type RawCarouselPost,
   type Slide,
 } from "@/lib/post-templates";
+import {
+  deleteEntry,
+  loadHistory,
+  promoteEntry,
+  pushHistoryEntry,
+  updateCurrentEntry,
+  type SavedPost,
+} from "@/lib/post-history";
 import ProfileEditor from "@/components/post-builder/ProfileEditor";
 import ParamsPanel from "@/components/post-builder/ParamsPanel";
 import InputPanel, {
   EMPTY_INPUT,
   type InputState,
 } from "@/components/post-builder/InputPanel";
+import RecentPosts from "@/components/post-builder/RecentPosts";
 import SlideEditor from "@/components/post-builder/SlideEditor";
 import SlidePreviewGrid from "@/components/post-builder/SlidePreviewGrid";
 import CaptionPanel from "@/components/post-builder/CaptionPanel";
@@ -95,10 +104,70 @@ export default function PostBuilder() {
   const [error, setError] = useState<string | null>(null);
   const [igStatus, setIgStatus] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState<null | "tool" | "canva">(null);
+  const [history, setHistory] = useState<SavedPost[]>([]);
+  // Tracks which history entry is currently loaded so RecentPosts can
+  // show the "Editing" badge on the right card.
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
 
   // Hidden full-size render targets for PNG export. Each ref is 1080x1350 (4:5 portrait).
   const exportRefs = useRef<(HTMLDivElement | null)[]>([]);
   exportRefs.current = slides.map((_, i) => exportRefs.current[i] ?? null);
+
+  // Load history on mount.
+  useEffect(() => {
+    setHistory(loadHistory());
+  }, []);
+
+  // Auto-save edits into the current (entry[0]) history record. Debounced
+  // 1.2s so we don't thrash localStorage on every keystroke.
+  useEffect(() => {
+    if (slides.length === 0) return;
+    if (!activeHistoryId) return;
+    const t = setTimeout(() => {
+      updateCurrentEntry({
+        slides,
+        caption,
+        hooks,
+        input: {
+          mode: input.mode,
+          topic: input.topic,
+          text: input.text,
+          raw: input.raw,
+          igUrl: input.igUrl,
+        },
+      });
+      setHistory(loadHistory());
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [slides, caption, hooks, input, activeHistoryId]);
+
+  function handleLoadHistoryEntry(entry: SavedPost) {
+    const next = promoteEntry(entry.id);
+    setHistory(next);
+    setSlides(entry.slides);
+    setCaption(entry.caption);
+    setHooks(entry.hooks);
+    setSelectedId(entry.slides[0]?.id ?? null);
+    setActiveHistoryId(entry.id);
+    // Restore the input snapshot too so the user sees what they generated
+    // from. We deliberately skip images (too big for localStorage).
+    setInput((prev) => ({
+      ...prev,
+      mode: entry.input.mode,
+      topic: entry.input.topic,
+      text: entry.input.text,
+      raw: entry.input.raw,
+      igUrl: entry.input.igUrl,
+    }));
+  }
+
+  function handleDeleteHistoryEntry(id: string) {
+    const next = deleteEntry(id);
+    setHistory(next);
+    if (activeHistoryId === id) {
+      setActiveHistoryId(null);
+    }
+  }
 
   const selected = useMemo(
     () => slides.find((s) => s.id === selectedId) ?? null,
@@ -175,6 +244,17 @@ export default function PostBuilder() {
       setCaption(post.caption);
       setHooks(post.hooks);
       setSelectedId(post.slides[0]?.id ?? null);
+      // Snapshot this fresh post into history (limit 2). Skip images in
+      // the input snapshot — they're huge data URLs.
+      const entry = pushHistoryEntry(post, {
+        mode: input.mode,
+        topic: input.topic,
+        text: input.text,
+        raw: input.raw,
+        igUrl: input.igUrl,
+      });
+      setHistory(loadHistory());
+      setActiveHistoryId(entry.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -511,6 +591,12 @@ export default function PostBuilder() {
         </aside>
 
         <section className="space-y-4">
+          <RecentPosts
+            history={history}
+            activeId={activeHistoryId}
+            onLoad={handleLoadHistoryEntry}
+            onDelete={handleDeleteHistoryEntry}
+          />
           <SlidePreviewGrid
             slides={slides}
             profile={profile}
