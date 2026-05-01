@@ -9,16 +9,20 @@ import { useEffect, useState } from "react";
 import {
   PILLAR_COLOR_OPTIONS,
   pillarColorClasses,
+  type CoachSettings,
   type Pillar,
   type Rotation,
 } from "@/app/coach/lib/strategy";
 import {
   defaultPillars,
   defaultRotation,
+  defaultSettings,
   loadCustomPillars,
   loadCustomRotation,
+  loadCustomSettings,
   saveCustomPillars,
   saveCustomRotation,
+  saveCustomSettings,
 } from "@/app/coach/lib/customization";
 
 interface Props {
@@ -49,14 +53,14 @@ function emptyPillar(): Pillar {
 export default function PillarsScheduleEditor({ open, onClose, onSaved }: Props) {
   const [pillars, setPillars] = useState<Pillar[]>(defaultPillars());
   const [rotation, setRotation] = useState<Rotation>(defaultRotation());
+  const [settings, setSettings] = useState<CoachSettings>(defaultSettings());
 
   // On open, load whatever's currently saved (or fall back to defaults).
   useEffect(() => {
     if (!open) return;
-    const savedPillars = loadCustomPillars();
-    const savedRotation = loadCustomRotation();
-    setPillars(savedPillars ?? defaultPillars());
-    setRotation(savedRotation ?? defaultRotation());
+    setPillars(loadCustomPillars() ?? defaultPillars());
+    setRotation(loadCustomRotation() ?? defaultRotation());
+    setSettings(loadCustomSettings() ?? defaultSettings());
   }, [open]);
 
   if (!open) return null;
@@ -90,21 +94,28 @@ export default function PillarsScheduleEditor({ open, onClose, onSaved }: Props)
     setRotation((r) => ({ ...r, [slot]: { ...r[slot], [day]: pillarId } }));
   }
 
+  function patchSettings(patch: Partial<CoachSettings>) {
+    setSettings((s) => ({ ...s, ...patch }));
+  }
+
   function onSave() {
     saveCustomPillars(pillars);
     saveCustomRotation(rotation);
+    saveCustomSettings(settings);
     onSaved();
     onClose();
   }
 
   function onResetDefaults() {
-    if (!confirm("Reset pillars and schedule to the Dr. Jeff defaults? This wipes your customizations.")) {
+    if (!confirm("Reset pillars, schedule, and settings to defaults? This wipes your customizations.")) {
       return;
     }
     saveCustomPillars(null);
     saveCustomRotation(null);
+    saveCustomSettings(null);
     setPillars(defaultPillars());
     setRotation(defaultRotation());
+    setSettings(defaultSettings());
     onSaved();
     onClose();
   }
@@ -279,6 +290,65 @@ export default function PillarsScheduleEditor({ open, onClose, onSaved }: Props)
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Post Builder settings */}
+        <div className="mb-6">
+          <h3 className="mb-2 text-sm font-semibold text-gray-800">
+            Post Builder settings
+          </h3>
+          <p className="mb-3 text-xs text-gray-500">
+            These get displayed in Today&apos;s Plan and embedded in the
+            Claude.ai prompt. Edit them so the prompts and the Locked Settings
+            card match your brand and audience.
+          </p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="text-xs text-gray-600">
+              Slide count (max 10)
+              <input
+                type="number"
+                min={3}
+                max={10}
+                value={settings.slideCount}
+                onChange={(e) =>
+                  patchSettings({
+                    slideCount: Math.max(3, Math.min(10, Number(e.target.value) || 10)),
+                  })
+                }
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600">
+              Reading level
+              <input
+                type="text"
+                value={settings.readingLevel}
+                onChange={(e) => patchSettings({ readingLevel: e.target.value })}
+                placeholder="3rd grade"
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600 md:col-span-2">
+              Audience
+              <input
+                type="text"
+                value={settings.audience}
+                onChange={(e) => patchSettings({ audience: e.target.value })}
+                placeholder="e.g. PAs and NPs in their 20s and 30s"
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="text-xs text-gray-600 md:col-span-2">
+              Tone
+              <input
+                type="text"
+                value={settings.tone}
+                onChange={(e) => patchSettings({ tone: e.target.value })}
+                placeholder="e.g. confident, direct, no-fluff"
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              />
+            </label>
           </div>
         </div>
 

@@ -10,16 +10,20 @@
 // strategy module's effective references point at the user's data.
 
 import {
+  DEFAULT_COACH_SETTINGS,
   DEFAULT_ROTATION,
   PILLARS,
   setEffectivePillars,
   setEffectiveRotation,
+  setEffectiveSettings,
+  type CoachSettings,
   type Pillar,
   type Rotation,
 } from "./strategy";
 
 const LS_KEY_PILLARS = "coach_custom_pillars";
 const LS_KEY_ROTATION = "coach_custom_rotation";
+const LS_KEY_SETTINGS = "coach_custom_settings";
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof localStorage !== "undefined";
@@ -86,11 +90,47 @@ export function saveCustomRotation(rotation: Rotation | null): void {
   }
 }
 
+export function loadCustomSettings(): CoachSettings | null {
+  if (!isBrowser()) return null;
+  try {
+    const raw = localStorage.getItem(LS_KEY_SETTINGS);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (
+      typeof parsed.slideCount !== "number" ||
+      typeof parsed.readingLevel !== "string" ||
+      typeof parsed.audience !== "string" ||
+      typeof parsed.tone !== "string"
+    ) {
+      return null;
+    }
+    return parsed as CoachSettings;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCustomSettings(settings: CoachSettings | null): void {
+  if (!isBrowser()) return;
+  try {
+    if (settings === null) {
+      localStorage.removeItem(LS_KEY_SETTINGS);
+    } else {
+      localStorage.setItem(LS_KEY_SETTINGS, JSON.stringify(settings));
+    }
+  } catch {
+    // ignore
+  }
+}
+
 // Wires custom data from localStorage into the strategy module's
-// effective refs. Call once on app boot. Idempotent.
+// effective refs. Call once on app boot, plus after any save in the
+// editor. Idempotent.
 export function installCustomData(): void {
   setEffectivePillars(loadCustomPillars());
   setEffectiveRotation(loadCustomRotation());
+  setEffectiveSettings(loadCustomSettings());
 }
 
 // Convenience: the default pillars + rotation, used to seed the editor
@@ -104,4 +144,8 @@ export function defaultRotation(): Rotation {
     am: { ...DEFAULT_ROTATION.am },
     pm: { ...DEFAULT_ROTATION.pm },
   };
+}
+
+export function defaultSettings(): CoachSettings {
+  return { ...DEFAULT_COACH_SETTINGS };
 }

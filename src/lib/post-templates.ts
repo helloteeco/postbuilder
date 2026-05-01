@@ -33,32 +33,41 @@ export type CoverBg =
 //   - "rounded" Nunito — friendly approachable rounded sans (lifestyle / coach)
 export type ProfileFont = "sans" | "serif" | "display" | "rounded";
 
-export interface HookOpenerSlide {
+// Common color/background fields available on EVERY slide type. Slide 1
+// (hook-opener) has used these since launch; every body slide type also
+// exposes them so a user can theme the whole carousel, not just the cover.
+//
+// All three are optional — leaving them undefined renders the slide with
+// the default white-bg / dark-text body look.
+export interface SlideStyleFields {
+  bg?: CoverBg;
+  // Only used when bg === "custom". Both should be hex like "#1A2B3C".
+  // Body text color is auto-computed from bg luminance for legibility.
+  customBg?: string;
+  customAccent?: string;
+}
+
+export interface HookOpenerSlide extends SlideStyleFields {
   type: "hook-opener";
   headline: string; // e.g. "These are the best rural Airbnb markets for 2026:"
   subtitle?: string; // small secondary line under the headline (often parenthetical)
   items?: string[]; // numbered preview list, rendered "1. ..." — optional
   footer?: string[]; // short closing paragraphs — optional
-  bg?: CoverBg; // cover background; defaults to "white"
-  // Only used when bg === "custom". Both should be hex like "#1A2B3C".
-  // The text color is auto-computed from bg luminance for legibility.
-  customBg?: string;
-  customAccent?: string;
 }
 
-export interface PersonalStorySlide {
+export interface PersonalStorySlide extends SlideStyleFields {
   type: "personal-story";
   paragraphs: string[]; // each string is one paragraph; **word** renders bold
 }
 
-export interface CriteriaBulletsSlide {
+export interface CriteriaBulletsSlide extends SlideStyleFields {
   type: "criteria-bullets";
   heading: string;
   bullets: string[];
   footer?: string;
 }
 
-export interface MarketDetailSlide {
+export interface MarketDetailSlide extends SlideStyleFields {
   type: "market-detail";
   rank: number; // 1, 2, 3...
   title: string; // "Wolfe County, KY"
@@ -67,18 +76,18 @@ export interface MarketDetailSlide {
   stats?: { label: string; value: string }[]; // [{label:"Gross Rev Potential", value:"$75,940/year"}]
 }
 
-export interface NumberedListSlide {
+export interface NumberedListSlide extends SlideStyleFields {
   type: "numbered-list";
   heading: string;
   items: string[];
 }
 
-export interface PlainTextSlide {
+export interface PlainTextSlide extends SlideStyleFields {
   type: "plain-text";
   paragraphs: string[];
 }
 
-export interface CtaSlide {
+export interface CtaSlide extends SlideStyleFields {
   type: "cta";
   paragraphs: string[]; // **word** renders bold
 }

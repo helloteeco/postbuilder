@@ -374,11 +374,38 @@ export function getNextDays(start: Date, count = 7): DayPlan[] {
   return out;
 }
 
-// Locked Post Builder settings shown in Today's Plan card. The Coach
-// Mode is opinionated about what the user should always use.
-export const LOCKED_POST_BUILDER_SETTINGS = {
+// Settings the user copies into the Post Builder when they go to write.
+// Editable per user via the customization editor — defaults match the
+// Dr. Jeff seed.
+export interface CoachSettings {
+  slideCount: number;
+  readingLevel: string;
+  audience: string;
+  tone: string;
+}
+
+export const DEFAULT_COACH_SETTINGS: CoachSettings = {
   slideCount: 10,
   readingLevel: "3rd grade",
   audience: "high income earners with $65k saved",
   tone: "confident, direct, no-fluff",
-} as const;
+};
+
+let effectiveSettingsRef: CoachSettings = DEFAULT_COACH_SETTINGS;
+
+export function getEffectiveSettings(): CoachSettings {
+  return effectiveSettingsRef;
+}
+
+export function setEffectiveSettings(next: CoachSettings | null): void {
+  effectiveSettingsRef = next ?? DEFAULT_COACH_SETTINGS;
+}
+
+// Deprecated: kept as an alias for callers that haven't migrated to
+// getEffectiveSettings(). Always reflects the current (possibly customized)
+// values, so nothing breaks if a stale import lingers.
+export const LOCKED_POST_BUILDER_SETTINGS = new Proxy({} as CoachSettings, {
+  get(_, key: string) {
+    return getEffectiveSettings()[key as keyof CoachSettings];
+  },
+});

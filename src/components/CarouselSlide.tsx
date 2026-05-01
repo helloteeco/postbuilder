@@ -509,18 +509,22 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
       );
     }
 
-    // Body layout: profile row at top, content below.
+    // Body layout: profile row at top, content below. Uses the same
+    // coverPalette() helper as the cover so any of the 8 bg presets
+    // (white default + soft / yellow / dark / cream / forest / navy /
+    // custom) themes the entire slide consistently.
+    const bodyPalette = coverPalette(slide.bg ?? "white", slide.customBg, slide.customAccent);
     return (
       <div
         ref={ref}
         style={{
           width: SLIDE_WIDTH,
           height: SLIDE_HEIGHT,
-          background: "#FFFFFF",
+          background: bodyPalette.bg,
           padding: "80px 80px",
           boxSizing: "border-box",
           fontFamily: fontFamilyFor(profile),
-          color: "#0F1419",
+          color: bodyPalette.fg,
           textAlign: "left",
           overflowWrap: "break-word",
           display: "flex",
@@ -530,17 +534,21 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
           outlineOffset: -4,
         }}
       >
-        <ProfileRow profile={profile} color="#0F1419" mutedColor="#6B7280" />
+        <ProfileRow
+          profile={profile}
+          color={bodyPalette.fg}
+          mutedColor={bodyPalette.muted}
+        />
         <div style={{ flex: 1 }}>
           {slide.type === "personal-story" && (
-            <PersonalStoryBody paragraphs={slide.paragraphs} accent={ACCENT_COLOR} />
+            <PersonalStoryBody paragraphs={slide.paragraphs} accent={bodyPalette.accent} />
           )}
           {slide.type === "criteria-bullets" && (
             <CriteriaBulletsBody
               heading={slide.heading}
               bullets={slide.bullets}
               footer={slide.footer}
-              accent={ACCENT_COLOR}
+              accent={bodyPalette.accent}
             />
           )}
           {slide.type === "market-detail" && (
@@ -550,21 +558,21 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
               subtitle={slide.subtitle}
               bullets={slide.bullets}
               stats={slide.stats}
-              accent={ACCENT_COLOR}
+              accent={bodyPalette.accent}
             />
           )}
           {slide.type === "numbered-list" && (
             <NumberedListBody
               heading={slide.heading}
               items={slide.items}
-              accent={ACCENT_COLOR}
+              accent={bodyPalette.accent}
             />
           )}
           {slide.type === "plain-text" && (
-            <PlainTextBody paragraphs={slide.paragraphs} accent={ACCENT_COLOR} />
+            <PlainTextBody paragraphs={slide.paragraphs} accent={bodyPalette.accent} />
           )}
           {slide.type === "cta" && (
-            <PlainTextBody paragraphs={slide.paragraphs} accent={ACCENT_COLOR} />
+            <PlainTextBody paragraphs={slide.paragraphs} accent={bodyPalette.accent} />
           )}
         </div>
       </div>
