@@ -20,10 +20,14 @@ import {
   type Pillar,
   type Rotation,
 } from "./strategy";
+import { channelKey, getCurrentChannelId } from "./channels";
 
-const LS_KEY_PILLARS = "coach_custom_pillars";
-const LS_KEY_ROTATION = "coach_custom_rotation";
-const LS_KEY_SETTINGS = "coach_custom_settings";
+// Storage keys are scoped per channel via channelKey(channelId, suffix).
+// The "current" channel is read from localStorage on every storage call,
+// so switching channels in the UI immediately changes which keys are read.
+const SUFFIX_PILLARS = "custom_pillars";
+const SUFFIX_ROTATION = "custom_rotation";
+const SUFFIX_SETTINGS = "custom_settings";
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof localStorage !== "undefined";
@@ -32,7 +36,7 @@ function isBrowser(): boolean {
 export function loadCustomPillars(): Pillar[] | null {
   if (!isBrowser()) return null;
   try {
-    const raw = localStorage.getItem(LS_KEY_PILLARS);
+    const raw = localStorage.getItem(channelKey(getCurrentChannelId(), SUFFIX_PILLARS));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
@@ -54,9 +58,9 @@ export function saveCustomPillars(pillars: Pillar[] | null): void {
   if (!isBrowser()) return;
   try {
     if (pillars === null) {
-      localStorage.removeItem(LS_KEY_PILLARS);
+      localStorage.removeItem(channelKey(getCurrentChannelId(), SUFFIX_PILLARS));
     } else {
-      localStorage.setItem(LS_KEY_PILLARS, JSON.stringify(pillars));
+      localStorage.setItem(channelKey(getCurrentChannelId(), SUFFIX_PILLARS), JSON.stringify(pillars));
     }
   } catch {
     // ignore quota issues
@@ -66,7 +70,7 @@ export function saveCustomPillars(pillars: Pillar[] | null): void {
 export function loadCustomRotation(): Rotation | null {
   if (!isBrowser()) return null;
   try {
-    const raw = localStorage.getItem(LS_KEY_ROTATION);
+    const raw = localStorage.getItem(channelKey(getCurrentChannelId(), SUFFIX_ROTATION));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
@@ -81,9 +85,9 @@ export function saveCustomRotation(rotation: Rotation | null): void {
   if (!isBrowser()) return;
   try {
     if (rotation === null) {
-      localStorage.removeItem(LS_KEY_ROTATION);
+      localStorage.removeItem(channelKey(getCurrentChannelId(), SUFFIX_ROTATION));
     } else {
-      localStorage.setItem(LS_KEY_ROTATION, JSON.stringify(rotation));
+      localStorage.setItem(channelKey(getCurrentChannelId(), SUFFIX_ROTATION), JSON.stringify(rotation));
     }
   } catch {
     // ignore
@@ -93,7 +97,7 @@ export function saveCustomRotation(rotation: Rotation | null): void {
 export function loadCustomSettings(): CoachSettings | null {
   if (!isBrowser()) return null;
   try {
-    const raw = localStorage.getItem(LS_KEY_SETTINGS);
+    const raw = localStorage.getItem(channelKey(getCurrentChannelId(), SUFFIX_SETTINGS));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
@@ -115,9 +119,9 @@ export function saveCustomSettings(settings: CoachSettings | null): void {
   if (!isBrowser()) return;
   try {
     if (settings === null) {
-      localStorage.removeItem(LS_KEY_SETTINGS);
+      localStorage.removeItem(channelKey(getCurrentChannelId(), SUFFIX_SETTINGS));
     } else {
-      localStorage.setItem(LS_KEY_SETTINGS, JSON.stringify(settings));
+      localStorage.setItem(channelKey(getCurrentChannelId(), SUFFIX_SETTINGS), JSON.stringify(settings));
     }
   } catch {
     // ignore

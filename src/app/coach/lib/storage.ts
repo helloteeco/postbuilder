@@ -18,7 +18,13 @@ export interface CoachPost {
   createdAt: number;
 }
 
-const LS_KEY_POSTS = "coach_posts";
+import { channelKey, getCurrentChannelId } from "./channels";
+
+// Per-channel scoped key. Each channel keeps its own performance log so
+// switching channels gives you a fresh tracker.
+function postsKey(): string {
+  return channelKey(getCurrentChannelId(), "posts");
+}
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof localStorage !== "undefined";
@@ -27,7 +33,7 @@ function isBrowser(): boolean {
 export function loadPosts(): CoachPost[] {
   if (!isBrowser()) return [];
   try {
-    const raw = localStorage.getItem(LS_KEY_POSTS);
+    const raw = localStorage.getItem(postsKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -53,7 +59,7 @@ export function loadPosts(): CoachPost[] {
 export function savePosts(posts: CoachPost[]): void {
   if (!isBrowser()) return;
   try {
-    localStorage.setItem(LS_KEY_POSTS, JSON.stringify(posts));
+    localStorage.setItem(postsKey(), JSON.stringify(posts));
   } catch {
     // Quota exceeded or storage disabled — nothing to do.
   }
