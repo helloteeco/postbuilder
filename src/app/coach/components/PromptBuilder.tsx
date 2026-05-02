@@ -33,10 +33,10 @@ interface CtaOption {
 }
 
 const DEFAULT_CTAS: CtaOption[] = [
-  { keyword: "RURAL", promise: "the 6-market rural Airbnb shortlist" },
-  { keyword: "TAX", promise: "the STR tax loophole walkthrough" },
-  { keyword: "BUY-BOX", promise: "the rural Airbnb buy-box checklist" },
-  { keyword: "OPS", promise: "the 7-person operator team blueprint" },
+  { keyword: "RURAL", promise: "a free mini course" },
+  { keyword: "TAX", promise: "a free mini course" },
+  { keyword: "BUY-BOX", promise: "a free mini course" },
+  { keyword: "OPS", promise: "a free mini course" },
 ];
 
 // Composite score so a single number ranks both metrics. Save target is
@@ -141,7 +141,7 @@ ${learningBlock}
 STRUCTURE:
 - Section 1: Hook that stops the scroll. Use the hook formula above. Punchy, 6-9 words. The whole point of the post in one line.
 - Sections 2-9: 8 supporting points, examples, or steps that build the case. Each 2-4 short sentences (40-80 words).
-- Section 10: CTA — direct readers to DM "${ctaKeyword}" for ${ctaPromise}. Make it clear and specific.
+- Section 10: CTA — direct readers to DM "${ctaKeyword}". Use the promise EXACTLY as written above ("${ctaPromise}") — do NOT invent, expand, or describe what's inside it. Don't promise modules, lessons, PDFs, checklists, spreadsheets, or anything else not literally written above. If the promise is "a free mini course", say "free mini course" — nothing more.
 
 HARD RULES:
 - Match the angles and specificity of the top-performing posts above. Avoid the patterns of the underperformers.
@@ -150,6 +150,7 @@ HARD RULES:
 - Bold 2-4 high-impact words per section using **double asterisks** (e.g. **$300K**, **outperforms**, **nobody talks about this**). Bold the nouns and numbers, not whole sentences.
 - No emojis. No hashtags. No markdown headers beyond the "Section N:" labels.
 - Don't preface with intro text — go straight to "Section 1:".
+- NEVER fabricate specifics about what gets DMed. The CTA promise above is the only thing you may reference.
 
 OUTPUT FORMAT:
 

@@ -167,6 +167,29 @@ export default function CoachDashboard() {
         </button>
       </div>
 
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+        <div className="mb-1 font-semibold uppercase tracking-wider text-amber-800">
+          Why we post · the flywheel
+        </div>
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 font-medium">
+          <span>Content</span>
+          <span className="text-amber-500">→</span>
+          <span>Trust</span>
+          <span className="text-amber-500">→</span>
+          <span>Capital</span>
+          <span className="text-amber-500">→</span>
+          <span>Deals</span>
+          <span className="text-amber-500">→</span>
+          <span>Case Studies</span>
+          <span className="text-amber-500">→</span>
+          <span>More Content</span>
+        </div>
+        <div className="mt-1 text-amber-800/80">
+          Every post feeds the next stage. If a post doesn&apos;t move
+          someone closer to trusting you, skip it.
+        </div>
+      </div>
+
       <PromptBuilder key={`pb-${revision}`} selectedSlot={selectedSlot} />
       <TodaysPlan key={`tp-${revision}`} />
       <WeekCalendar
