@@ -29,8 +29,11 @@ import {
   CoachPost,
   saveRate,
   shareRate,
+  type LoggedPost,
+  type PostMetrics,
 } from "./storage";
 import { channelKey, getCurrentChannelId } from "./channels";
+import { getDetectionSnapshot } from "./timingHelpers";
 
 const SUFFIX_LOCKED = "locked_strategy";
 
@@ -187,6 +190,24 @@ export function flagOutlier(
 // "Log more posts to unlock outlier detection."
 export function isDetectionEligible(posts: CoachPost[]): boolean {
   return posts.length >= MIN_POSTS_FOR_DETECTION;
+}
+
+// ── 48-hour-snapshot-aware detection (LoggedPost shape) ──────────────────
+
+// Returns the PostMetrics we should use to evaluate this post. Prefers
+// the 48-hour snapshot via getDetectionSnapshot. Returns null if the
+// post hasn't reached a settled state yet (only preliminary <24h data),
+// in which case callers should skip outlier detection on this post.
+export function getDetectionMetrics(post: LoggedPost): PostMetrics | null {
+  const snapshot = getDetectionSnapshot(post);
+  return snapshot?.metrics ?? null;
+}
+
+// Filter for "posts the detection layer should evaluate". Excludes
+// LoggedPosts whose only snapshot is preliminary (<24h) — averages
+// computed from preliminary numbers would be misleading.
+export function detectionEligiblePosts(posts: LoggedPost[]): LoggedPost[] {
+  return posts.filter((p) => getDetectionMetrics(p) !== null);
 }
 
 // ── Pillar / hook inference for a logged post ────────────────────────────

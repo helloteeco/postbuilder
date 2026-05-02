@@ -1,47 +1,97 @@
-// Section C of Coach Mode: log a published post (title, date, reach, saves,
-// shares, profile visits) and see save/share rates color-coded against
-// the targets defined in storage.ts.
+// Section C of Coach Mode: log a published post's metrics over time so
+// Coach Mode can teach you what's working.
+//
+// Posts are stored as LoggedPost — a sequence of timed snapshots, not a
+// single metrics row — so the tracker can:
+//   - tell you when in the curve to log (48h is the sweet spot)
+//   - prompt for a 7-day update to nail down archival numbers
+//   - run outlier detection against your 48h reading specifically
+//
+// TopPostMode still consumes the legacy CoachPost shape; we convert at
+// the boundary using the 48h-preferred snapshot via toCoachPost(post,
+// getDetectionSnapshot(post)).
 
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  HOOK_FORMULAS,
+  getEffectivePillars,
+  type HookFormula,
+  type Pillar,
+} from "@/app/coach/lib/strategy";
+import {
   SAVE_RATE_TARGET,
   SHARE_RATE_TARGET,
-  addPost,
+  addLoggedPost,
+  addSnapshotToPost,
   deletePost,
-  loadPosts,
+  loadLoggedPosts,
   ratePerf,
   saveRate,
   shareRate,
+  toCoachPost,
   type CoachPost,
+  type LoggedPost,
   type PerfTier,
+  type PostMetrics,
+  type PostSnapshot,
 } from "@/app/coach/lib/storage";
 import {
   computeAverages,
+  detectionEligiblePosts,
   flagOutlier,
   isDetectionEligible,
   MIN_POSTS_FOR_DETECTION,
 } from "@/app/coach/lib/topPostAnalysis";
+import {
+  classifyTiming,
+  getDetectionSnapshot,
+  getRecommendedNextSnapshot,
+  hoursSincePost,
+  type TimingBucket,
+} from "@/app/coach/lib/timingHelpers";
+import LoggingReminder from "@/app/coach/components/LoggingReminder";
 import TopPostBadge from "@/app/coach/components/TopPostBadge";
 import TopPostMode from "@/app/coach/components/TopPostMode";
 
-interface FormState {
-  title: string;
-  datePosted: string;
+// ── Form types ─────────────────────────────────────────────────────────
+
+interface MetricsForm {
   reach: string;
   saves: string;
   shares: string;
+  likes: string;
+  comments: string;
   profileVisits: string;
+  follows: string;
 }
 
-const EMPTY_FORM: FormState = {
-  title: "",
-  datePosted: new Date().toISOString().slice(0, 10),
+interface NewPostDraft {
+  mode: "new";
+  title: string;
+  postedAt: string; // datetime-local format (yyyy-mm-ddThh:mm)
+  pillar: string;
+  hookFormula: string;
+  metrics: MetricsForm;
+}
+
+interface UpdateDraft {
+  mode: "update";
+  postId: string;
+  metrics: MetricsForm;
+}
+
+type FormDraft = NewPostDraft | UpdateDraft | null;
+
+const EMPTY_METRICS: MetricsForm = {
   reach: "",
   saves: "",
   shares: "",
+  likes: "",
+  comments: "",
   profileVisits: "",
+  follows: "",
 };
 
 function tierClasses(t: PerfTier): string {
@@ -54,139 +104,263 @@ function fmtRate(n: number): string {
   return `${n.toFixed(2)}%`;
 }
 
+function nowDateTimeLocal(): string {
+  // datetime-local expects yyyy-mm-ddThh:mm in the user's local zone.
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function dateTimeLocalToIso(local: string): string {
+  // Treat input as local time → convert to ISO (UTC). new Date(localStr)
+  // does this correctly when the string lacks a Z suffix.
+  if (!local) return new Date().toISOString();
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString();
+  return d.toISOString();
+}
+
+function metricsFromForm(m: MetricsForm): PostMetrics {
+  return {
+    reach: Number(m.reach) || 0,
+    saves: Number(m.saves) || 0,
+    shares: Number(m.shares) || 0,
+    likes: Number(m.likes) || 0,
+    comments: Number(m.comments) || 0,
+    profileVisits: Number(m.profileVisits) || 0,
+    follows: Number(m.follows) || 0,
+  };
+}
+
+function emptyNewDraft(pillars: Pillar[]): NewPostDraft {
+  return {
+    mode: "new",
+    title: "",
+    postedAt: nowDateTimeLocal(),
+    pillar: pillars[0]?.id ?? "",
+    hookFormula: HOOK_FORMULAS[0]?.id ?? "",
+    metrics: { ...EMPTY_METRICS },
+  };
+}
+
+function snapshotsBadgeForPost(post: LoggedPost): string {
+  const has48 = post.snapshots.some(
+    (s) => s.hoursAfterPosting >= 36 && s.hoursAfterPosting <= 72,
+  );
+  const has7d = post.snapshots.some((s) => s.hoursAfterPosting >= 7 * 24);
+  const parts: string[] = [];
+  if (post.snapshots.length === 0) parts.push("pending");
+  else if (post.snapshots.length === 1 && !has48 && !has7d) parts.push("preliminary");
+  if (has48) parts.push("48h");
+  if (has7d) parts.push("7d");
+  return parts.join(" · ");
+}
+
+// Pick the snapshot we'd pass to TopPostMode if the user clicked
+// "Mark as winner". Prefers detection-eligible (48h+ settled) data, but
+// falls back to the latest snapshot so manual flagging still works
+// pre-48h. Returns null when the post has no snapshots at all.
+function snapshotForModal(post: LoggedPost): PostSnapshot | null {
+  return getDetectionSnapshot(post) ?? post.snapshots[post.snapshots.length - 1] ?? null;
+}
+
 export default function PerformanceTracker() {
-  const [posts, setPosts] = useState<CoachPost[]>([]);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [posts, setPosts] = useState<LoggedPost[]>([]);
+  const [draft, setDraft] = useState<FormDraft>(null);
   const [topPostId, setTopPostId] = useState<string | null>(null);
+  // Bumped on dismissal so LoggingReminder re-evaluates after a skip.
+  const [reminderRev, setReminderRev] = useState(0);
 
   useEffect(() => {
-    setPosts(loadPosts());
+    setPosts(loadLoggedPosts());
   }, []);
 
-  const averages = useMemo(() => computeAverages(posts), [posts]);
-  const detectionOn = isDetectionEligible(posts);
-  const openedPost = topPostId ? posts.find((p) => p.id === topPostId) ?? null : null;
+  const pillars = getEffectivePillars();
 
-  function update<K extends keyof FormState>(k: K, v: FormState[K]) {
-    setForm((f) => ({ ...f, [k]: v }));
+  // Outlier detection runs on the CoachPost views derived from each
+  // post's detection snapshot (48h preferred). Posts without an
+  // eligible snapshot are excluded from both averages and flag checks.
+  const eligibleCoachViews: CoachPost[] = useMemo(() => {
+    return detectionEligiblePosts(posts).map((p) => {
+      const snap = getDetectionSnapshot(p);
+      // detectionEligiblePosts already filtered, so snap is non-null.
+      return toCoachPost(p, snap as PostSnapshot);
+    });
+  }, [posts]);
+
+  const averages = useMemo(
+    () => computeAverages(eligibleCoachViews),
+    [eligibleCoachViews],
+  );
+  const detectionOn = isDetectionEligible(eligibleCoachViews);
+
+  // What we pass into TopPostMode when the user clicks a badge or
+  // "Mark as winner". Uses the same snapshot-preference rule as the
+  // detection layer for consistency.
+  const openedView: { post: CoachPost | null; allPosts: CoachPost[] } = useMemo(() => {
+    if (!topPostId) return { post: null, allPosts: eligibleCoachViews };
+    const lp = posts.find((p) => p.id === topPostId);
+    if (!lp) return { post: null, allPosts: eligibleCoachViews };
+    const snap = snapshotForModal(lp);
+    return {
+      post: snap ? toCoachPost(lp, snap) : null,
+      allPosts: eligibleCoachViews,
+    };
+  }, [topPostId, posts, eligibleCoachViews]);
+
+  // ── Form helpers ────────────────────────────────────────────────────
+
+  function startNewDraft() {
+    setDraft(emptyNewDraft(pillars));
   }
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.title.trim()) return;
-    addPost({
-      title: form.title.trim(),
-      datePosted: form.datePosted,
-      reach: Number(form.reach) || 0,
-      saves: Number(form.saves) || 0,
-      shares: Number(form.shares) || 0,
-      profileVisits: Number(form.profileVisits) || 0,
+  function startUpdateDraft(post: LoggedPost) {
+    setDraft({
+      mode: "update",
+      postId: post.id,
+      metrics: { ...EMPTY_METRICS },
     });
-    setPosts(loadPosts());
-    setForm(EMPTY_FORM);
+  }
+
+  function cancelDraft() {
+    setDraft(null);
+  }
+
+  function updateNew<K extends keyof NewPostDraft>(k: K, v: NewPostDraft[K]) {
+    setDraft((d) => (d && d.mode === "new" ? { ...d, [k]: v } : d));
+  }
+
+  function updateMetrics<K extends keyof MetricsForm>(k: K, v: string) {
+    setDraft((d) => {
+      if (!d) return d;
+      return { ...d, metrics: { ...d.metrics, [k]: v } };
+    });
+  }
+
+  // Save the new post WITH initial metrics (after Step 3).
+  function saveNewWithMetrics(d: NewPostDraft, isPreliminary: boolean) {
+    if (!d.title.trim()) return;
+    const isoPostedAt = dateTimeLocalToIso(d.postedAt);
+    const hours = hoursSincePost(isoPostedAt);
+    addLoggedPost({
+      title: d.title.trim(),
+      postedAt: isoPostedAt,
+      pillar: d.pillar,
+      hookFormula: d.hookFormula,
+      initialMetrics: metricsFromForm(d.metrics),
+      initialHoursAfterPosting: isPreliminary ? Math.round(hours) : Math.round(hours),
+    });
+    setPosts(loadLoggedPosts());
+    setDraft(null);
+  }
+
+  // "Remind me at 48 hours" — saves the post WITHOUT a snapshot. The
+  // LoggingReminder component will surface it once 48-72h has passed.
+  function saveNewWithoutMetrics(d: NewPostDraft) {
+    if (!d.title.trim()) return;
+    addLoggedPost({
+      title: d.title.trim(),
+      postedAt: dateTimeLocalToIso(d.postedAt),
+      pillar: d.pillar,
+      hookFormula: d.hookFormula,
+    });
+    setPosts(loadLoggedPosts());
+    setDraft(null);
+  }
+
+  function saveUpdate(d: UpdateDraft) {
+    const post = posts.find((p) => p.id === d.postId);
+    if (!post) return;
+    const hours = hoursSincePost(post.postedAt);
+    addSnapshotToPost({
+      postId: post.id,
+      metrics: metricsFromForm(d.metrics),
+      hoursAfterPosting: Math.round(hours),
+    });
+    setPosts(loadLoggedPosts());
+    setDraft(null);
   }
 
   function onDelete(id: string) {
     deletePost(id);
-    setPosts(loadPosts());
+    setPosts(loadLoggedPosts());
   }
+
+  function bumpReminderRev() {
+    setReminderRev((r) => r + 1);
+    setPosts(loadLoggedPosts());
+  }
+
+  // Currently-selected new-post form data (or null if not in new mode).
+  const newDraft = draft && draft.mode === "new" ? draft : null;
+  const updateDraft = draft && draft.mode === "update" ? draft : null;
+  const updatingPost = updateDraft
+    ? posts.find((p) => p.id === updateDraft.postId) ?? null
+    : null;
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="mb-1 text-lg font-bold text-gray-900">
-        Performance tracker
-      </h2>
+      <h2 className="mb-1 text-lg font-bold text-gray-900">Performance tracker</h2>
       <p className="mb-2 text-sm text-gray-600">
-        Targets: save rate ≥ {SAVE_RATE_TARGET}%, share rate ≥{" "}
-        {SHARE_RATE_TARGET}%. Every post you log here teaches Coach Mode what
-        works for your audience and reshapes future Claude prompts.
+        Targets: save rate ≥ {SAVE_RATE_TARGET}%, share rate ≥ {SHARE_RATE_TARGET}%.
+        Every post you log here teaches Coach Mode what works for your audience
+        and reshapes future Claude prompts.
       </p>
       <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-        <span className="font-semibold">When to log:</span> wait{" "}
-        <strong>7-14 days after posting</strong>. By then ~85% of saves and
-        shares have rolled in on Instagram, so the numbers stop moving and
-        the data is stable. Logging too early gives Coach Mode misleading
-        signal.
+        <span className="font-semibold">When to log:</span> the most reliable
+        read is at <strong>48 hours</strong>. Reach climbs for ~7 days, saves
+        accumulate for 2-3 weeks, but shares — the strongest resonance signal —
+        mostly lock in by 48h. You can log a preliminary read sooner; we&apos;ll
+        remind you to update at 48h and again at 7 days for archival accuracy.
       </div>
 
-      <form
-        onSubmit={onSubmit}
-        className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-6"
-      >
-        <label className="md:col-span-3 text-xs text-gray-600">
-          Post title
-          <input
-            type="text"
-            value={form.title}
-            onChange={(e) => update("title", e.target.value)}
-            placeholder="e.g. 6 rural markets I'd buy"
-            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-            required
-          />
-        </label>
-        <label className="md:col-span-3 text-xs text-gray-600">
-          Date posted
-          <input
-            type="date"
-            value={form.datePosted}
-            onChange={(e) => update("datePosted", e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-            required
-          />
-        </label>
-        <label className="text-xs text-gray-600 md:col-span-2">
-          Reach
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={form.reach}
-            onChange={(e) => update("reach", e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-          />
-        </label>
-        <label className="text-xs text-gray-600 md:col-span-1">
-          Saves
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={form.saves}
-            onChange={(e) => update("saves", e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-          />
-        </label>
-        <label className="text-xs text-gray-600 md:col-span-1">
-          Shares
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={form.shares}
-            onChange={(e) => update("shares", e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-          />
-        </label>
-        <label className="text-xs text-gray-600 md:col-span-2">
-          Profile visits <span className="text-gray-400">(optional)</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={form.profileVisits}
-            onChange={(e) => update("profileVisits", e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-          />
-        </label>
-        <div className="md:col-span-6">
+      {/* eslint-disable-next-line @typescript-eslint/no-unused-expressions */}
+      {/* reminderRev is used to trigger re-mount of LoggingReminder after dismissal */}
+      <LoggingReminder
+        key={`rem-${reminderRev}`}
+        posts={posts}
+        onLogUpdate={(p) => startUpdateDraft(p)}
+        onChanged={bumpReminderRev}
+      />
+
+      {draft === null && (
+        <div className="mb-6">
           <button
-            type="submit"
+            type="button"
+            onClick={startNewDraft}
             className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
           >
-            Log post
+            + Log a new post
           </button>
         </div>
-      </form>
+      )}
+
+      {newDraft && (
+        <NewPostForm
+          draft={newDraft}
+          pillars={pillars}
+          hooks={HOOK_FORMULAS}
+          onChange={updateNew}
+          onMetricChange={updateMetrics}
+          onCancel={cancelDraft}
+          onSubmitWithMetrics={(isPreliminary) =>
+            saveNewWithMetrics(newDraft, isPreliminary)
+          }
+          onRemindLater={() => saveNewWithoutMetrics(newDraft)}
+        />
+      )}
+
+      {updateDraft && updatingPost && (
+        <UpdateForm
+          post={updatingPost}
+          metrics={updateDraft.metrics}
+          pillars={pillars}
+          hooks={HOOK_FORMULAS}
+          onMetricChange={updateMetrics}
+          onCancel={cancelDraft}
+          onSubmit={() => saveUpdate(updateDraft)}
+        />
+      )}
 
       <div>
         <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -194,95 +368,480 @@ export default function PerformanceTracker() {
         </div>
         {posts.length === 0 ? (
           <div className="rounded border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
-            No posts logged yet. Log your first one above to start tracking.
+            No posts logged yet. Click &ldquo;Log a new post&rdquo; above to start tracking.
           </div>
         ) : (
           <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
-            {posts.map((p) => {
-              const sR = saveRate(p);
-              const shR = shareRate(p);
-              const sTier = ratePerf(sR, SAVE_RATE_TARGET);
-              const shTier = ratePerf(shR, SHARE_RATE_TARGET);
-              // Outlier detection only runs once we have enough posts to
-              // compute meaningful averages; otherwise the badge stays
-              // hidden and the user sees the "log more posts" hint below.
-              const flags = detectionOn ? flagOutlier(p, averages) : null;
-              return (
-                <li
-                  key={p.id}
-                  className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate font-medium text-gray-900">
-                        {p.title}
-                      </span>
-                      {flags && (
-                        <TopPostBadge
-                          flags={flags}
-                          onClick={() => setTopPostId(p.id)}
-                        />
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {p.datePosted} · reach {p.reach.toLocaleString()} · saves{" "}
-                      {p.saves} · shares {p.shares} · visits {p.profileVisits}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`rounded px-2 py-0.5 text-xs font-medium ${tierClasses(sTier)}`}
-                      title={`Save rate (target ${SAVE_RATE_TARGET}%)`}
-                    >
-                      Save {fmtRate(sR)}
-                    </span>
-                    <span
-                      className={`rounded px-2 py-0.5 text-xs font-medium ${tierClasses(shTier)}`}
-                      title={`Share rate (target ${SHARE_RATE_TARGET}%)`}
-                    >
-                      Share {fmtRate(shR)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setTopPostId(p.id)}
-                      className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
-                      title="Open Top Post Mode for this post (manual override)"
-                    >
-                      Mark as winner
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(p.id)}
-                      className="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
-                      aria-label="Delete this post"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
+            {posts.map((p) => (
+              <PostRow
+                key={p.id}
+                post={p}
+                detectionOn={detectionOn}
+                averages={averages}
+                onMarkWinner={() => setTopPostId(p.id)}
+                onDelete={() => onDelete(p.id)}
+                onLogUpdate={() => startUpdateDraft(p)}
+              />
+            ))}
           </ul>
         )}
         {posts.length > 0 && !detectionOn && (
           <div className="mt-2 rounded border border-dashed border-gray-300 p-2 text-xs text-gray-500">
-            Log {MIN_POSTS_FOR_DETECTION - posts.length} more post{MIN_POSTS_FOR_DETECTION - posts.length === 1 ? "" : "s"} to unlock outlier detection. You can still hit{" "}
+            Log {MIN_POSTS_FOR_DETECTION - eligibleCoachViews.length} more post
+            {MIN_POSTS_FOR_DETECTION - eligibleCoachViews.length === 1 ? "" : "s"}{" "}
+            (with 48h+ data) to unlock outlier detection. You can still hit{" "}
             <em>Mark as winner</em> manually on any post.
           </div>
         )}
       </div>
 
       <TopPostMode
-        open={openedPost !== null}
-        post={openedPost}
-        allPosts={posts}
+        open={openedView.post !== null}
+        post={openedView.post}
+        allPosts={openedView.allPosts}
         onClose={() => setTopPostId(null)}
         onStrategyChanged={() => {
-          /* Closing the modal will re-render Coach Mode via the parent's
-             revision counter when CoachDashboard sees the change.
-             Nothing to do here in this component itself. */
+          /* Strategy changes are propagated via the
+             "coach-strategy-changed" CustomEvent on the window — see
+             TopPostMode.tsx. TodaysPlan listens for it, this component
+             doesn't need to. */
         }}
       />
     </section>
   );
+}
+
+// ── Sub-components below ───────────────────────────────────────────────
+
+interface PostRowProps {
+  post: LoggedPost;
+  detectionOn: boolean;
+  averages: ReturnType<typeof computeAverages>;
+  onMarkWinner: () => void;
+  onDelete: () => void;
+  onLogUpdate: () => void;
+}
+
+function PostRow({
+  post,
+  detectionOn,
+  averages,
+  onMarkWinner,
+  onDelete,
+  onLogUpdate,
+}: PostRowProps) {
+  const detectionSnap = getDetectionSnapshot(post);
+  // Use the detection snapshot for the rate pills — that's what
+  // outlier detection uses, so the user sees the same numbers.
+  const display = detectionSnap ?? post.snapshots[post.snapshots.length - 1] ?? null;
+  const rateBasis: { reach: number; saves: number; shares: number } = display
+    ? {
+        reach: display.metrics.reach,
+        saves: display.metrics.saves,
+        shares: display.metrics.shares,
+      }
+    : { reach: 0, saves: 0, shares: 0 };
+  const sR = saveRate(rateBasis);
+  const shR = shareRate(rateBasis);
+  const sTier = ratePerf(sR, SAVE_RATE_TARGET);
+  const shTier = ratePerf(shR, SHARE_RATE_TARGET);
+
+  // Outlier flag uses the detection-eligible CoachPost view; if the
+  // post has no detection snapshot yet, no flag is computed.
+  const flags =
+    detectionOn && detectionSnap
+      ? flagOutlier(toCoachPost(post, detectionSnap), averages)
+      : null;
+
+  // Yellow border + Update CTA when the post is sitting in a reminder
+  // window without an updated snapshot.
+  const recommended = getRecommendedNextSnapshot(post);
+  const needsUpdate = recommended !== null;
+
+  const snapshotsLabel = snapshotsBadgeForPost(post);
+  const datePostedLocal = new Date(post.postedAt).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  return (
+    <li
+      className={`flex flex-wrap items-center justify-between gap-3 p-3 text-sm ${
+        needsUpdate ? "border-l-4 border-amber-300 pl-2" : ""
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate font-medium text-gray-900">{post.title}</span>
+          {snapshotsLabel && (
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-600">
+              {snapshotsLabel}
+            </span>
+          )}
+          {flags && (
+            <TopPostBadge flags={flags} onClick={onMarkWinner} />
+          )}
+          {post.isWinner && !flags && (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+              ★ winner
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-gray-500">
+          {datePostedLocal}
+          {display
+            ? ` · reach ${display.metrics.reach.toLocaleString()} · saves ${display.metrics.saves} · shares ${display.metrics.shares}`
+            : " · awaiting 48h snapshot"}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {display && (
+          <>
+            <span
+              className={`rounded px-2 py-0.5 text-xs font-medium ${tierClasses(sTier)}`}
+              title={`Save rate (target ${SAVE_RATE_TARGET}%)`}
+            >
+              Save {fmtRate(sR)}
+            </span>
+            <span
+              className={`rounded px-2 py-0.5 text-xs font-medium ${tierClasses(shTier)}`}
+              title={`Share rate (target ${SHARE_RATE_TARGET}%)`}
+            >
+              Share {fmtRate(shR)}
+            </span>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={onLogUpdate}
+          className={`rounded border px-2 py-0.5 text-xs ${
+            needsUpdate
+              ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+              : "border-gray-300 text-gray-700 hover:bg-gray-100"
+          }`}
+          title={
+            needsUpdate
+              ? `${recommended?.reason ?? "Update recommended"}`
+              : "Log another snapshot for this post"
+          }
+        >
+          {needsUpdate ? "Update now" : "Log update"}
+        </button>
+        {display && (
+          <button
+            type="button"
+            onClick={onMarkWinner}
+            className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
+            title="Open Top Post Mode for this post"
+          >
+            Mark as winner
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onDelete}
+          className="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
+          aria-label="Delete this post"
+        >
+          ×
+        </button>
+      </div>
+    </li>
+  );
+}
+
+interface NewPostFormProps {
+  draft: NewPostDraft;
+  pillars: Pillar[];
+  hooks: HookFormula[];
+  onChange: <K extends keyof NewPostDraft>(k: K, v: NewPostDraft[K]) => void;
+  onMetricChange: (k: keyof MetricsForm, v: string) => void;
+  onCancel: () => void;
+  onSubmitWithMetrics: (isPreliminary: boolean) => void;
+  onRemindLater: () => void;
+}
+
+function NewPostForm({
+  draft,
+  pillars,
+  hooks,
+  onChange,
+  onMetricChange,
+  onCancel,
+  onSubmitWithMetrics,
+  onRemindLater,
+}: NewPostFormProps) {
+  const isoPostedAt = dateTimeLocalToIso(draft.postedAt);
+  const hours = hoursSincePost(isoPostedAt);
+  const bucket = classifyTiming(hours);
+  const titleOk = draft.title.trim().length > 0;
+  const showMetrics =
+    bucket === "ideal" || bucket === "lateOk" || bucket === "mature";
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!titleOk) return;
+    onSubmitWithMetrics(bucket === "preliminary");
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="mb-6 space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4"
+    >
+      <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+        Step 1 — Choose the post
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+        <label className="text-xs text-gray-600 md:col-span-3">
+          Post title
+          <input
+            type="text"
+            value={draft.title}
+            onChange={(e) => onChange("title", e.target.value)}
+            placeholder="e.g. 6 rural markets I'd buy"
+            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            required
+          />
+        </label>
+        <label className="text-xs text-gray-600 md:col-span-3">
+          When did you post this?
+          <input
+            type="datetime-local"
+            value={draft.postedAt}
+            onChange={(e) => onChange("postedAt", e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            required
+          />
+        </label>
+        <label className="text-xs text-gray-600 md:col-span-3">
+          Pillar
+          <select
+            value={draft.pillar}
+            onChange={(e) => onChange("pillar", e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {pillars.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-gray-600 md:col-span-3">
+          Hook formula
+          <select
+            value={draft.hookFormula}
+            onChange={(e) => onChange("hookFormula", e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {hooks.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.template}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <TimingCard hours={hours} bucket={bucket} />
+
+      {showMetrics || bucket === "preliminary" ? (
+        <>
+          <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Step {bucket === "preliminary" ? "2 — Preliminary metrics" : "3 — Metrics"}
+          </div>
+          <MetricsFormGrid
+            metrics={draft.metrics}
+            onChange={onMetricChange}
+          />
+        </>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {bucket === "preliminary" ? (
+          <>
+            <button
+              type="submit"
+              disabled={!titleOk}
+              className="rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black disabled:opacity-40"
+            >
+              Log preliminary snapshot
+            </button>
+            <button
+              type="button"
+              onClick={onRemindLater}
+              disabled={!titleOk}
+              className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-40"
+            >
+              Remind me at 48 hours
+            </button>
+          </>
+        ) : showMetrics ? (
+          <button
+            type="submit"
+            disabled={!titleOk}
+            className="rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black disabled:opacity-40"
+          >
+            Save snapshot
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+interface UpdateFormProps {
+  post: LoggedPost;
+  metrics: MetricsForm;
+  pillars: Pillar[];
+  hooks: HookFormula[];
+  onMetricChange: (k: keyof MetricsForm, v: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}
+
+function UpdateForm({
+  post,
+  metrics,
+  pillars,
+  hooks,
+  onMetricChange,
+  onCancel,
+  onSubmit,
+}: UpdateFormProps) {
+  const hours = hoursSincePost(post.postedAt);
+  const bucket = classifyTiming(hours);
+  const pillarName =
+    pillars.find((p) => p.id === post.pillar)?.name ?? post.pillar ?? "—";
+  const hookTpl =
+    hooks.find((h) => h.id === post.hookFormula)?.template ?? post.hookFormula ?? "—";
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    onSubmit();
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="mb-6 space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4"
+    >
+      <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+        Log update — {post.title}
+      </div>
+      <div className="text-xs text-gray-500">
+        Posted {new Date(post.postedAt).toLocaleString()} · pillar {pillarName} ·{" "}
+        hook {hookTpl}
+      </div>
+
+      <TimingCard hours={hours} bucket={bucket} />
+
+      <MetricsFormGrid metrics={metrics} onChange={onMetricChange} />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="submit"
+          className="rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black"
+        >
+          Save snapshot
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+interface MetricsFormGridProps {
+  metrics: MetricsForm;
+  onChange: (k: keyof MetricsForm, v: string) => void;
+}
+
+function MetricsFormGrid({ metrics, onChange }: MetricsFormGridProps) {
+  const fields: { key: keyof MetricsForm; label: string; optional?: boolean }[] = [
+    { key: "reach", label: "Reach" },
+    { key: "saves", label: "Saves" },
+    { key: "shares", label: "Shares" },
+    { key: "likes", label: "Likes" },
+    { key: "comments", label: "Comments" },
+    { key: "profileVisits", label: "Profile visits", optional: true },
+    { key: "follows", label: "Follows", optional: true },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {fields.map(({ key, label, optional }) => (
+        <label key={key} className="text-xs text-gray-600">
+          {label}
+          {optional && <span className="text-gray-400"> (optional)</span>}
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={metrics[key]}
+            onChange={(e) => onChange(key, e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function TimingCard({ hours, bucket }: { hours: number; bucket: TimingBucket }) {
+  const display = Math.max(0, Math.round(hours));
+  switch (bucket) {
+    case "future":
+      return (
+        <div className="rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-600">
+          Posted-at is in the future. Adjust the timestamp once it&apos;s live.
+        </div>
+      );
+    case "preliminary":
+      return (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          <span className="font-semibold">It&apos;s only been {display} hours.</span>{" "}
+          Reach and saves are still climbing. The most reliable time to log this
+          post is at <strong>48 hours</strong> — we&apos;ll remind you. You can
+          log a preliminary snapshot anyway if you want a baseline.
+        </div>
+      );
+    case "ideal":
+      return (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+          <span className="font-semibold">Perfect timing.</span> {display}h since
+          posting. 48 hours is the sweet spot for an accurate read — log your
+          numbers below.
+        </div>
+      );
+    case "lateOk":
+      return (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+          <span className="font-semibold">Most of your reach is locked in.</span>{" "}
+          {display}h since posting. Log your current numbers — we&apos;ll suggest
+          one more update at 7 days for archival accuracy.
+        </div>
+      );
+    case "mature":
+      return (
+        <div className="rounded-lg border border-gray-200 bg-gray-100 p-3 text-xs text-gray-700">
+          <span className="font-semibold">This post is mature.</span> {display}h
+          since posting. Numbers are mostly final — log them now for the
+          historical record.
+        </div>
+      );
+  }
 }
