@@ -96,6 +96,10 @@ interface EditDraft {
   mode: "edit";
   postId: string;
   title: string;
+  // datetime-local format (yyyy-mm-ddThh:mm). Editable so users can fix
+  // a mistyped post time. Snapshots' hoursAfterPosting get recomputed
+  // against the corrected value on save.
+  postedAt: string;
   pillar: string;
   hookFormula: string;
   snapshots: SnapshotEditEntry[];
@@ -126,6 +130,15 @@ function fmtRate(n: number): string {
 function nowDateTimeLocal(): string {
   // datetime-local expects yyyy-mm-ddThh:mm in the user's local zone.
   const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Inverse of dateTimeLocalToIso — used by the edit-log form to seed
+// the datetime-local input from the post's stored ISO timestamp.
+function isoToDateTimeLocal(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return nowDateTimeLocal();
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
@@ -262,6 +275,7 @@ export default function PerformanceTracker() {
       mode: "edit",
       postId: post.id,
       title: post.title,
+      postedAt: isoToDateTimeLocal(post.postedAt),
       pillar: post.pillar,
       hookFormula: post.hookFormula,
       snapshots: post.snapshots.map((s) => ({
@@ -367,16 +381,29 @@ export default function PerformanceTracker() {
   function saveEdit(d: EditDraft) {
     const original = posts.find((p) => p.id === d.postId);
     if (!original) return;
+    // Convert the datetime-local back to ISO. If the user edited
+    // postedAt, recompute each snapshot's hoursAfterPosting against
+    // the corrected timestamp so detection-window classification
+    // stays accurate.
+    const newPostedAtIso = dateTimeLocalToIso(d.postedAt);
+    const newPostedAtMs = new Date(newPostedAtIso).getTime();
     const updated: LoggedPost = {
       ...original,
       title: d.title.trim() || original.title,
+      postedAt: newPostedAtIso,
       pillar: d.pillar,
       hookFormula: d.hookFormula,
-      snapshots: d.snapshots.map((s) => ({
-        loggedAt: s.loggedAt,
-        hoursAfterPosting: s.hoursAfterPosting,
-        metrics: metricsFromForm(s.metrics),
-      })),
+      snapshots: d.snapshots.map((s) => {
+        const loggedMs = new Date(s.loggedAt).getTime();
+        const recomputed = Number.isNaN(loggedMs) || Number.isNaN(newPostedAtMs)
+          ? s.hoursAfterPosting
+          : Math.max(0, Math.round((loggedMs - newPostedAtMs) / (60 * 60 * 1000)));
+        return {
+          loggedAt: s.loggedAt,
+          hoursAfterPosting: recomputed,
+          metrics: metricsFromForm(s.metrics),
+        };
+      }),
     };
     replacePost(updated);
     setPosts(loadLoggedPosts());
@@ -931,12 +958,21 @@ function EditForm({
         Edit logged post
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
-        <label className="text-xs text-gray-600 md:col-span-6">
+        <label className="text-xs text-gray-600 md:col-span-3">
           Post title
           <input
             type="text"
             value={draft.title}
             onChange={(e) => onMetaChange("title", e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-xs text-gray-600 md:col-span-3">
+          When did you post this?
+          <input
+            type="datetime-local"
+            value={draft.postedAt}
+            onChange={(e) => onMetaChange("postedAt", e.target.value)}
             className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
           />
         </label>
@@ -969,6 +1005,11 @@ function EditForm({
           </select>
         </label>
       </div>
+      <p className="-mt-2 text-[11px] text-gray-500">
+        Editing the posted-at time recomputes each snapshot&apos;s &ldquo;hours
+        after posting&rdquo; against the new timestamp, so the 48h / 7d
+        classifications stay accurate.
+      </p>
 
       <div className="space-y-3">
         <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
