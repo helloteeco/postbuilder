@@ -6,6 +6,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CoachGuides, { type GuideTab } from "@/app/coach/components/CoachGuides";
 import HookFormulas from "@/app/coach/components/HookFormulas";
 import PerformanceTracker from "@/app/coach/components/PerformanceTracker";
 import PillarReference from "@/app/coach/components/PillarReference";
@@ -36,6 +37,7 @@ export interface SelectedSlot {
 export default function CoachDashboard() {
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [guidesTab, setGuidesTab] = useState<GuideTab | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string>("");
   // Bumped after any save / channel switch to force children to remount
@@ -158,13 +160,29 @@ export default function CoachDashboard() {
             Delete
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditorOpen(true)}
-          className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
-        >
-          Customize pillars &amp; schedule
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setGuidesTab("how-to")}
+            className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            How to use
+          </button>
+          <button
+            type="button"
+            onClick={() => setGuidesTab("diy")}
+            className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            DIY in Claude
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditorOpen(true)}
+            className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            Customize pillars &amp; schedule
+          </button>
+        </div>
       </div>
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
@@ -207,6 +225,10 @@ export default function CoachDashboard() {
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
         onSaved={handleEditorSaved}
+      />
+      <CoachGuides
+        open={guidesTab}
+        onClose={() => setGuidesTab(null)}
       />
     </>
   );
