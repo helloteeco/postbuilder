@@ -22,8 +22,11 @@ import {
   saveRate,
   shareRate,
   type CoachPost,
+  type ContentAnalysis,
+  type LoggedPost,
 } from "@/app/coach/lib/storage";
 import {
+  buildDiagnosis,
   buildLockedStrategy,
   computeAverages,
   flagOutlier,
@@ -39,16 +42,25 @@ import {
   AMPLIFICATION_ACTIONS,
   HOOK_FORMULA_EXTENSIONS,
   PILLAR_FOLLOW_UPS,
+  generateStructuralFollowUps,
+  getStructuralHookVariants,
 } from "@/app/coach/lib/topPostRecommendations";
 
 interface Props {
   open: boolean;
   post: CoachPost | null;
+  // Optional full LoggedPost so the modal can render structural
+  // analysis when slides have been captured. Falls back to the legacy
+  // CoachPost-only diagnosis when this is missing.
+  loggedPost?: LoggedPost | null;
   allPosts: CoachPost[];
   onClose: () => void;
   // Called after the user locks in or resets the strategy so the parent
   // (PerformanceTracker → CoachDashboard) can refresh dependent UI.
   onStrategyChanged: () => void;
+  // Called when the user clicks "Add slide content". The parent owns
+  // SlideCaptureModal so it can refresh the post list after save.
+  onRequestSlideCapture?: (postId: string) => void;
 }
 
 function fmtRate(n: number): string {
@@ -62,9 +74,11 @@ function fmtMultiplier(n: number): string {
 export default function TopPostMode({
   open,
   post,
+  loggedPost,
   allPosts,
   onClose,
   onStrategyChanged,
+  onRequestSlideCapture,
 }: Props) {
   const [pillarId, setPillarId] = useState<string>("");
   const [hookId, setHookId] = useState<string>("");
@@ -94,19 +108,34 @@ export default function TopPostMode({
   const selectedPillar: Pillar | undefined = pillars.find((p) => p.id === pillarId);
   const selectedHook: HookFormula | undefined = HOOK_FORMULAS.find((h) => h.id === hookId);
 
+  // contentAnalysis lives on the LoggedPost (not the legacy CoachPost
+  // view), so we only have it when the parent passed loggedPost in.
+  const analysis: ContentAnalysis | null = loggedPost?.contentAnalysis ?? null;
+
   const followUps = useMemo(() => {
     if (!selectedPillar) return [];
-    // Prefer the curated library; fall back to the pillar's own topic
-    // bank for custom pillars that aren't in the library.
+    // Prefer structural follow-ups when slide content is available —
+    // they're tuned to the actual format that worked instead of being
+    // generic pillar templates.
+    if (analysis) {
+      const structural = generateStructuralFollowUps(selectedPillar.id, analysis);
+      if (structural.length > 0) return structural;
+    }
     const curated = PILLAR_FOLLOW_UPS[selectedPillar.id];
     if (curated && curated.length > 0) return curated;
     return selectedPillar.topics.slice(0, 5);
-  }, [selectedPillar]);
+  }, [selectedPillar, analysis]);
 
   const hookExtensions = useMemo(() => {
+    // When we have a captured hookStyle, lean on the style-aware
+    // variants. Otherwise fall back to the formula-id extensions.
+    if (analysis && analysis.hookStyle !== "unknown") {
+      const variants = getStructuralHookVariants(analysis.hookStyle);
+      if (variants.length > 0) return variants;
+    }
     if (!selectedHook) return [];
     return HOOK_FORMULA_EXTENSIONS[selectedHook.id] ?? [];
-  }, [selectedHook]);
+  }, [selectedHook, analysis]);
 
   const amplification = useMemo(() => {
     if (!selectedPillar) return [];
@@ -240,16 +269,29 @@ export default function TopPostMode({
           </div>
           {selectedPillar && selectedHook && (
             <div className="mt-3 rounded border border-emerald-300 bg-white p-3 text-sm text-gray-800">
-              <span className="font-semibold">Diagnosis:</span> Your
-              audience responds to{" "}
-              <span className={`font-semibold ${colors.text}`}>
-                {selectedPillar.name}
-              </span>{" "}
-              content with the{" "}
-              <em>{selectedHook.template}</em> hook structure. Lean into it.
+              <span className="font-semibold">Diagnosis:</span>{" "}
+              {loggedPost
+                ? buildDiagnosis(
+                    loggedPost,
+                    selectedPillar.name,
+                    selectedHook.template,
+                  )
+                : `Your audience responds to ${selectedPillar.name} content with the ${selectedHook.template} hook structure. Lean into it.`}
             </div>
           )}
         </section>
+
+        {/* Section 1.5 — Structural analysis (only when slides captured) */}
+        {analysis ? (
+          <StructuralAnalysisSection analysis={analysis} accentClass={colors.text} />
+        ) : (
+          loggedPost &&
+          onRequestSlideCapture && (
+            <AddSlidesCta
+              onAddSlides={() => onRequestSlideCapture(loggedPost.id)}
+            />
+          )
+        )}
 
         {/* Section 2 — 5 follow-up post ideas */}
         <section className="mb-6">
@@ -368,5 +410,148 @@ function Stat({
         {fmtMultiplier(multiplier)} avg
       </div>
     </div>
+  );
+}
+
+// ── Structural-analysis sub-components ────────────────────────────────
+
+function formatBadge(formatType: string, accentClass: string): string {
+  // Map a format type to a colored badge class. Uses Tailwind classes
+  // spelled out so the JIT scanner picks them up.
+  switch (formatType) {
+    case "list":
+      return "bg-blue-50 text-blue-800 border-blue-200";
+    case "story":
+      return "bg-rose-50 text-rose-800 border-rose-200";
+    case "math_walkthrough":
+      return "bg-emerald-50 text-emerald-800 border-emerald-200";
+    case "before_after":
+      return "bg-amber-50 text-amber-900 border-amber-200";
+    case "contrarian":
+      return "bg-purple-50 text-purple-800 border-purple-200";
+    case "framework":
+      return "bg-indigo-50 text-indigo-800 border-indigo-200";
+    default:
+      return `bg-gray-50 ${accentClass} border-gray-200`;
+  }
+}
+
+function StructuralAnalysisSection({
+  analysis,
+  accentClass,
+}: {
+  analysis: ContentAnalysis;
+  accentClass: string;
+}) {
+  const formatLabel = analysis.formatType.replace(/_/g, " ");
+  const formatClass = formatBadge(analysis.formatType, accentClass);
+  return (
+    <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+          Structural analysis
+        </div>
+        <span
+          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold capitalize ${formatClass}`}
+        >
+          {formatLabel} format
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-xs sm:grid-cols-6">
+        <Counter label="Slides" value={analysis.slideCount} />
+        <Counter label="Avg words" value={analysis.averageSlideLength} />
+        <Counter label="$ amounts" value={analysis.dollarAmounts.length} />
+        <Counter label="%" value={analysis.percentages.length} />
+        <Counter label="Cities" value={analysis.namedCities.length} />
+        <Counter label="People" value={analysis.namedPeople.length} />
+      </div>
+      {(analysis.namedCities.length > 0 ||
+        analysis.namedPeople.length > 0 ||
+        analysis.namedBrands.length > 0) && (
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-600">
+          {analysis.namedCities.length > 0 && (
+            <span>
+              <span className="font-semibold text-gray-800">Cities:</span>{" "}
+              {analysis.namedCities.join(", ")}
+            </span>
+          )}
+          {analysis.namedPeople.length > 0 && (
+            <span>
+              <span className="font-semibold text-gray-800">People:</span>{" "}
+              {analysis.namedPeople.join(", ")}
+            </span>
+          )}
+          {analysis.namedBrands.length > 0 && (
+            <span>
+              <span className="font-semibold text-gray-800">Brands:</span>{" "}
+              {analysis.namedBrands.join(", ")}
+            </span>
+          )}
+        </div>
+      )}
+      {analysis.boldedTerms.length > 0 && (
+        <div className="mt-3">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+            Bolded terms
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {analysis.boldedTerms.map((t, i) => (
+              <span
+                key={i}
+                className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-800"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-600">
+        <span>
+          <span className="font-semibold text-gray-800">Hook style:</span>{" "}
+          {analysis.hookStyle.replace(/_/g, " ")}
+        </span>
+        <span>
+          <span className="font-semibold text-gray-800">CTA pattern:</span>{" "}
+          {analysis.ctaPattern.replace(/_/g, " ")}
+          {analysis.ctaKeyword ? ` · "${analysis.ctaKeyword}"` : ""}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function Counter({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded border border-gray-200 bg-gray-50 p-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+        {label}
+      </div>
+      <div className="text-base font-semibold text-gray-900">{value}</div>
+    </div>
+  );
+}
+
+function AddSlidesCta({ onAddSlides }: { onAddSlides: () => void }) {
+  return (
+    <section className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+          Want better recommendations?
+        </div>
+        <p className="mt-0.5 text-sm text-gray-700">
+          Add your slide content to unlock structural analysis — Top Post Mode
+          will tailor follow-up ideas and hook variants to the actual format
+          that worked.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onAddSlides}
+        className="rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black"
+      >
+        Add slide content
+      </button>
+    </section>
   );
 }

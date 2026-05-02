@@ -210,6 +210,59 @@ export function detectionEligiblePosts(posts: LoggedPost[]): LoggedPost[] {
   return posts.filter((p) => getDetectionMetrics(p) !== null);
 }
 
+// ── Diagnosis sentence builder ────────────────────────────────────────
+//
+// When contentAnalysis is available, the diagnosis is structural —
+// describes the actual pattern of the slides ("list format + 4 named
+// cities + specific_number hook"). Falls back to the old metadata-only
+// diagnosis ("audience responds to {pillar} with {hook formula}") when
+// no slides have been captured.
+//
+// pillarName / hookTemplate are passed in instead of looked up from
+// strategy.ts so this function stays usable from any caller and isn't
+// affected by user customization.
+export function buildDiagnosis(
+  post: LoggedPost,
+  pillarName: string,
+  hookTemplate: string,
+): string {
+  const a = post.contentAnalysis;
+  if (!a) {
+    return `Your audience responds to ${pillarName} content with the ${hookTemplate} hook structure. Lean into it.`;
+  }
+
+  const parts: string[] = [];
+
+  if (a.formatType !== "unknown") {
+    parts.push(`${a.formatType.replace(/_/g, " ")} format`);
+  }
+
+  if (a.dollarAmounts.length >= 3) {
+    parts.push(`${a.dollarAmounts.length} specific dollar amounts`);
+  }
+
+  if (a.namedCities.length >= 1) {
+    const sample = a.namedCities.slice(0, 3).join(", ");
+    parts.push(
+      `${a.namedCities.length} named ${a.namedCities.length === 1 ? "city" : "cities"} (${sample})`,
+    );
+  }
+
+  if (a.namedPeople.length >= 1) {
+    parts.push(
+      `${a.namedPeople.length} named ${a.namedPeople.length === 1 ? "person" : "people"} (${a.namedPeople.join(", ")})`,
+    );
+  }
+
+  parts.push(`${a.hookStyle.replace(/_/g, " ")} hook`);
+
+  if (parts.length === 0) {
+    return `Your audience responds to ${pillarName} content with the ${hookTemplate} hook structure.`;
+  }
+
+  return `Your top post used: ${parts.join(" + ")}. This is your structural pattern — repeat it in the next 14 days.`;
+}
+
 // ── Pillar / hook inference for a logged post ────────────────────────────
 
 // Performance Tracker doesn't store pillar/hook with each post, so we

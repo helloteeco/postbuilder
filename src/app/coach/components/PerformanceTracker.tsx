@@ -54,6 +54,7 @@ import {
 } from "@/app/coach/lib/timingHelpers";
 import LoggingReminder from "@/app/coach/components/LoggingReminder";
 import TopPostBadge from "@/app/coach/components/TopPostBadge";
+import SlideCaptureModal from "@/app/coach/components/SlideCaptureModal";
 import TopPostMode from "@/app/coach/components/TopPostMode";
 
 // ── Form types ─────────────────────────────────────────────────────────
@@ -216,6 +217,10 @@ export default function PerformanceTracker() {
   const [posts, setPosts] = useState<LoggedPost[]>([]);
   const [draft, setDraft] = useState<FormDraft>(null);
   const [topPostId, setTopPostId] = useState<string | null>(null);
+  // ID of the post we're currently capturing slides for. Mutually
+  // exclusive with topPostId — the modal closes Top Post Mode while
+  // open so we don't stack overlays.
+  const [slideCaptureFor, setSlideCaptureFor] = useState<string | null>(null);
   // Bumped on dismissal so LoggingReminder re-evaluates after a skip.
   const [reminderRev, setReminderRev] = useState(0);
 
@@ -525,6 +530,7 @@ export default function PerformanceTracker() {
                 onDelete={() => onDelete(p.id)}
                 onLogUpdate={() => startUpdateDraft(p)}
                 onEdit={() => startEditDraft(p)}
+                onAddSlides={() => setSlideCaptureFor(p.id)}
               />
             ))}
           </ul>
@@ -542,6 +548,9 @@ export default function PerformanceTracker() {
       <TopPostMode
         open={openedView.post !== null}
         post={openedView.post}
+        loggedPost={
+          topPostId ? posts.find((p) => p.id === topPostId) ?? null : null
+        }
         allPosts={openedView.allPosts}
         onClose={() => setTopPostId(null)}
         onStrategyChanged={() => {
@@ -549,6 +558,25 @@ export default function PerformanceTracker() {
              "coach-strategy-changed" CustomEvent on the window — see
              TopPostMode.tsx. TodaysPlan listens for it, this component
              doesn't need to. */
+        }}
+        onRequestSlideCapture={(id) => {
+          // Close Top Post Mode and open the slide capture modal so
+          // we don't stack overlays. After save, the user can re-open
+          // Top Post Mode to see the new structural analysis.
+          setTopPostId(null);
+          setSlideCaptureFor(id);
+        }}
+      />
+
+      <SlideCaptureModal
+        open={slideCaptureFor !== null}
+        postId={slideCaptureFor}
+        onClose={() => setSlideCaptureFor(null)}
+        onSaved={() => {
+          // Reload the post list so any consumer (PostRow icons,
+          // the next Top Post Mode open, etc.) sees the new slides
+          // + analysis.
+          setPosts(loadLoggedPosts());
         }}
       />
     </section>
@@ -565,6 +593,7 @@ interface PostRowProps {
   onDelete: () => void;
   onLogUpdate: () => void;
   onEdit: () => void;
+  onAddSlides: () => void;
 }
 
 function PostRow({
@@ -575,6 +604,7 @@ function PostRow({
   onDelete,
   onLogUpdate,
   onEdit,
+  onAddSlides,
 }: PostRowProps) {
   const detectionSnap = getDetectionSnapshot(post);
   // Use the detection snapshot for the rate pills — that's what
@@ -673,6 +703,24 @@ function PostRow({
           }
         >
           {needsUpdate ? "Update now" : "Log update"}
+        </button>
+        <button
+          type="button"
+          onClick={onAddSlides}
+          className={`rounded border px-2 py-0.5 text-xs ${
+            post.slides && post.slides.length > 0
+              ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              : "border-dashed border-gray-300 bg-white text-gray-600 hover:bg-gray-100"
+          }`}
+          title={
+            post.slides && post.slides.length > 0
+              ? `${post.slides.length} slides captured — click to view or replace`
+              : "Add slide content to unlock structural analysis in Top Post Mode"
+          }
+        >
+          {post.slides && post.slides.length > 0
+            ? `▣ Slides · ${post.slides.length}`
+            : "▢ Add slides"}
         </button>
         <button
           type="button"

@@ -39,6 +39,64 @@ export interface PostSnapshot {
   metrics: PostMetrics;
 }
 
+// One slide's flattened text plus position-based hook/CTA flags. Used
+// by Top Post Mode's structural analysis to learn from what actually
+// worked at the content level (not just the metadata level).
+export interface SlideContent {
+  slideNumber: number;
+  text: string;
+  isHook?: boolean; // true for slide 1
+  isCTA?: boolean; // true for the last slide
+}
+
+// Format types contentAnalysis can detect on a captured carousel.
+export type ContentFormatType =
+  | "list"
+  | "story"
+  | "math_walkthrough"
+  | "before_after"
+  | "contrarian"
+  | "framework"
+  | "unknown";
+
+export type ContentHookStyle =
+  | "counter_intuitive"
+  | "list_promise"
+  | "news_driven"
+  | "specific_number"
+  | "question"
+  | "unknown";
+
+export type ContentCtaPattern =
+  | "dm_keyword"
+  | "soft_offer"
+  | "no_cta"
+  | "unknown";
+
+// Structural fingerprint of the slides. Computed by contentAnalysis.ts
+// from the SlideContent[] captured for a post. Drives the diagnosis
+// sentence and the structural follow-up recommendations in Top Post
+// Mode.
+export interface ContentAnalysis {
+  formatType: ContentFormatType;
+  slideCount: number;
+  // Number density
+  dollarAmounts: string[];
+  percentages: string[];
+  yearReferences: string[];
+  // Specificity
+  namedCities: string[];
+  namedPeople: string[];
+  namedBrands: string[];
+  // Structural
+  hookStyle: ContentHookStyle;
+  averageSlideLength: number;
+  ctaPattern: ContentCtaPattern;
+  ctaKeyword?: string;
+  // Emphasis
+  boldedTerms: string[];
+}
+
 export interface LoggedPost {
   id: string;
   title: string;
@@ -58,6 +116,12 @@ export interface LoggedPost {
   lockedStrategyTriggered: boolean;
   // Insertion timestamp, used for sort order.
   createdAt: number;
+  // Optional — captured slide content + structural analysis. Both are
+  // optional so legacy posts continue to work without slides.
+  slides?: SlideContent[];
+  contentAnalysis?: ContentAnalysis;
+  // Optional reference to the Post Builder draft a user linked.
+  postBuilderDraftId?: string;
 }
 
 // Legacy single-metrics shape. Still consumed by TopPostMode and the
