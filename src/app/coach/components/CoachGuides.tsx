@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type GuideTab = "how-to" | "diy";
 
@@ -19,13 +19,16 @@ interface Props {
 
 export default function CoachGuides({ open, onClose }: Props) {
   // Local copy of the active tab so the user can switch inside the
-  // modal without the parent driving it. Initial value tracks `open`.
+  // modal without the parent driving it.
   const [tab, setTab] = useState<GuideTab>(open ?? "how-to");
 
-  // Whenever the parent re-opens the modal, sync the active tab.
-  if (open !== null && open !== tab) {
-    setTab(open);
-  }
+  // Re-sync the active tab whenever the parent opens the modal on a
+  // specific tab. Crucially this only fires when `open` itself
+  // changes — clicking tabs inside the modal updates local `tab`
+  // without triggering this effect, so internal switches stick.
+  useEffect(() => {
+    if (open !== null) setTab(open);
+  }, [open]);
 
   if (open === null) return null;
 
@@ -88,6 +91,38 @@ function HowToTab() {
       <p className="mb-4 text-xs text-gray-500">
         The 8-step rhythm. Set it up once, run it weekly.
       </p>
+
+      <div className="mb-5 rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+          Why this works
+        </div>
+        <p className="text-sm text-gray-700">
+          Posting consistently requires three decisions every day:{" "}
+          <span className="font-semibold">what</span> to post,{" "}
+          <span className="font-semibold">how</span> to write it, and{" "}
+          <span className="font-semibold">when</span> to log the result. Each
+          decision is small, but stacked across a year you make a thousand of
+          them — that&apos;s where decision fatigue kills consistent creators.
+        </p>
+        <p className="mt-2 text-sm text-gray-700">
+          Coach Mode collapses those decisions into one click. The system
+          picks today&apos;s pillar (rotation), hands you a hook formula and 5
+          topic ideas, generates the Claude prompt that produces the
+          long-form copy, and tracks performance so the next post is informed
+          by data instead of guesswork. You stay in flow, your brand stays
+          consistent, and the work compounds — every logged post sharpens the
+          next prompt.
+        </p>
+        <p className="mt-2 text-sm text-gray-700">
+          It&apos;s also a habit loop. The more you log, the smarter the
+          recommendations. Top Post Mode triggers automatically when
+          something resonates so you don&apos;t have to remember to
+          &ldquo;double down on what worked.&rdquo; That&apos;s how channels
+          grow without burnout — the tool stays open, the rhythm stays the
+          same, and the channel compounds in the background.
+        </p>
+      </div>
+
       <ol className="list-decimal space-y-3 pl-5 text-sm text-gray-700">
         <li>
           <span className="font-semibold text-gray-900">Set up your channel (one-time).</span>{" "}

@@ -329,6 +329,15 @@ export function deletePost(id: string): void {
   saveLoggedPosts(loadLoggedPosts().filter((p) => p.id !== id));
 }
 
+// Replace a post in place. Used by the edit-log form to commit changes
+// to title / pillar / hook / individual snapshots / snapshot deletions
+// without re-typing any storage logic per field.
+export function replacePost(post: LoggedPost): void {
+  saveLoggedPosts(
+    loadLoggedPosts().map((p) => (p.id === post.id ? post : p)),
+  );
+}
+
 // ── Reminder dismissal (so the LoggingReminder doesn't nag forever) ───
 
 export type ReminderKind = "h48" | "d7";

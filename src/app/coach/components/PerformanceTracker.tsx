@@ -27,6 +27,7 @@ import {
   addSnapshotToPost,
   deletePost,
   loadLoggedPosts,
+  replacePost,
   ratePerf,
   saveRate,
   shareRate,
@@ -82,7 +83,25 @@ interface UpdateDraft {
   metrics: MetricsForm;
 }
 
-type FormDraft = NewPostDraft | UpdateDraft | null;
+// Pre-existing snapshots inflated into editable form rows. We carry
+// loggedAt / hoursAfterPosting through unchanged on save so the
+// snapshot's timing classification stays stable.
+interface SnapshotEditEntry {
+  loggedAt: string;
+  hoursAfterPosting: number;
+  metrics: MetricsForm;
+}
+
+interface EditDraft {
+  mode: "edit";
+  postId: string;
+  title: string;
+  pillar: string;
+  hookFormula: string;
+  snapshots: SnapshotEditEntry[];
+}
+
+type FormDraft = NewPostDraft | UpdateDraft | EditDraft | null;
 
 const EMPTY_METRICS: MetricsForm = {
   reach: "",
@@ -129,6 +148,22 @@ function metricsFromForm(m: MetricsForm): PostMetrics {
     comments: Number(m.comments) || 0,
     profileVisits: Number(m.profileVisits) || 0,
     follows: Number(m.follows) || 0,
+  };
+}
+
+// Inverse of metricsFromForm — used by the edit-log form to populate
+// inputs from a stored snapshot. Empty number → empty string so the
+// inputs render blank instead of "0".
+function metricsToForm(m: PostMetrics): MetricsForm {
+  const s = (n: number) => (n ? String(n) : "");
+  return {
+    reach: s(m.reach),
+    saves: s(m.saves),
+    shares: s(m.shares),
+    likes: s(m.likes),
+    comments: s(m.comments),
+    profileVisits: s(m.profileVisits),
+    follows: s(m.follows),
   };
 }
 
@@ -222,6 +257,21 @@ export default function PerformanceTracker() {
     });
   }
 
+  function startEditDraft(post: LoggedPost) {
+    setDraft({
+      mode: "edit",
+      postId: post.id,
+      title: post.title,
+      pillar: post.pillar,
+      hookFormula: post.hookFormula,
+      snapshots: post.snapshots.map((s) => ({
+        loggedAt: s.loggedAt,
+        hoursAfterPosting: s.hoursAfterPosting,
+        metrics: metricsToForm(s.metrics),
+      })),
+    });
+  }
+
   function cancelDraft() {
     setDraft(null);
   }
@@ -230,10 +280,43 @@ export default function PerformanceTracker() {
     setDraft((d) => (d && d.mode === "new" ? { ...d, [k]: v } : d));
   }
 
+  // Updates the new-post or update form's single metrics block. Edit
+  // mode has multiple snapshots so it uses updateEditSnapshotMetric
+  // instead.
   function updateMetrics<K extends keyof MetricsForm>(k: K, v: string) {
     setDraft((d) => {
       if (!d) return d;
+      if (d.mode === "edit") return d; // not the right updater
       return { ...d, metrics: { ...d.metrics, [k]: v } };
+    });
+  }
+
+  function updateEditMeta<K extends keyof EditDraft>(k: K, v: EditDraft[K]) {
+    setDraft((d) => (d && d.mode === "edit" ? { ...d, [k]: v } : d));
+  }
+
+  function updateEditSnapshotMetric(
+    snapIdx: number,
+    key: keyof MetricsForm,
+    value: string,
+  ) {
+    setDraft((d) => {
+      if (!d || d.mode !== "edit") return d;
+      const next = d.snapshots.slice();
+      next[snapIdx] = {
+        ...next[snapIdx],
+        metrics: { ...next[snapIdx].metrics, [key]: value },
+      };
+      return { ...d, snapshots: next };
+    });
+  }
+
+  function removeEditSnapshot(snapIdx: number) {
+    setDraft((d) => {
+      if (!d || d.mode !== "edit") return d;
+      const next = d.snapshots.slice();
+      next.splice(snapIdx, 1);
+      return { ...d, snapshots: next };
     });
   }
 
@@ -281,6 +364,25 @@ export default function PerformanceTracker() {
     setDraft(null);
   }
 
+  function saveEdit(d: EditDraft) {
+    const original = posts.find((p) => p.id === d.postId);
+    if (!original) return;
+    const updated: LoggedPost = {
+      ...original,
+      title: d.title.trim() || original.title,
+      pillar: d.pillar,
+      hookFormula: d.hookFormula,
+      snapshots: d.snapshots.map((s) => ({
+        loggedAt: s.loggedAt,
+        hoursAfterPosting: s.hoursAfterPosting,
+        metrics: metricsFromForm(s.metrics),
+      })),
+    };
+    replacePost(updated);
+    setPosts(loadLoggedPosts());
+    setDraft(null);
+  }
+
   function onDelete(id: string) {
     deletePost(id);
     setPosts(loadLoggedPosts());
@@ -297,6 +399,7 @@ export default function PerformanceTracker() {
   const updatingPost = updateDraft
     ? posts.find((p) => p.id === updateDraft.postId) ?? null
     : null;
+  const editDraft = draft && draft.mode === "edit" ? draft : null;
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -362,6 +465,19 @@ export default function PerformanceTracker() {
         />
       )}
 
+      {editDraft && (
+        <EditForm
+          draft={editDraft}
+          pillars={pillars}
+          hooks={HOOK_FORMULAS}
+          onMetaChange={updateEditMeta}
+          onSnapshotMetricChange={updateEditSnapshotMetric}
+          onRemoveSnapshot={removeEditSnapshot}
+          onCancel={cancelDraft}
+          onSubmit={() => saveEdit(editDraft)}
+        />
+      )}
+
       <div>
         <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
           Recent posts
@@ -381,6 +497,7 @@ export default function PerformanceTracker() {
                 onMarkWinner={() => setTopPostId(p.id)}
                 onDelete={() => onDelete(p.id)}
                 onLogUpdate={() => startUpdateDraft(p)}
+                onEdit={() => startEditDraft(p)}
               />
             ))}
           </ul>
@@ -420,6 +537,7 @@ interface PostRowProps {
   onMarkWinner: () => void;
   onDelete: () => void;
   onLogUpdate: () => void;
+  onEdit: () => void;
 }
 
 function PostRow({
@@ -429,6 +547,7 @@ function PostRow({
   onMarkWinner,
   onDelete,
   onLogUpdate,
+  onEdit,
 }: PostRowProps) {
   const detectionSnap = getDetectionSnapshot(post);
   // Use the detection snapshot for the rate pills — that's what
@@ -527,6 +646,14 @@ function PostRow({
           }
         >
           {needsUpdate ? "Update now" : "Log update"}
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
+          title="Edit this post's title, pillar, hook, or any snapshot's metrics"
+        >
+          Edit
         </button>
         {display && (
           <button
@@ -753,6 +880,141 @@ function UpdateForm({
           className="rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black"
         >
           Save snapshot
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+interface EditFormProps {
+  draft: EditDraft;
+  pillars: Pillar[];
+  hooks: HookFormula[];
+  onMetaChange: <K extends keyof EditDraft>(k: K, v: EditDraft[K]) => void;
+  onSnapshotMetricChange: (
+    snapIdx: number,
+    key: keyof MetricsForm,
+    value: string,
+  ) => void;
+  onRemoveSnapshot: (snapIdx: number) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}
+
+function EditForm({
+  draft,
+  pillars,
+  hooks,
+  onMetaChange,
+  onSnapshotMetricChange,
+  onRemoveSnapshot,
+  onCancel,
+  onSubmit,
+}: EditFormProps) {
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    onSubmit();
+  }
+  return (
+    <form
+      onSubmit={submit}
+      className="mb-6 space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4"
+    >
+      <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+        Edit logged post
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+        <label className="text-xs text-gray-600 md:col-span-6">
+          Post title
+          <input
+            type="text"
+            value={draft.title}
+            onChange={(e) => onMetaChange("title", e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-xs text-gray-600 md:col-span-3">
+          Pillar
+          <select
+            value={draft.pillar}
+            onChange={(e) => onMetaChange("pillar", e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {pillars.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-gray-600 md:col-span-3">
+          Hook formula
+          <select
+            value={draft.hookFormula}
+            onChange={(e) => onMetaChange("hookFormula", e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {hooks.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.template}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="space-y-3">
+        <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+          Snapshots ({draft.snapshots.length})
+        </div>
+        {draft.snapshots.length === 0 ? (
+          <div className="rounded border border-dashed border-gray-300 p-3 text-xs text-gray-500">
+            This post has no snapshots yet — click <em>Log update</em> on the
+            post row to add one.
+          </div>
+        ) : (
+          draft.snapshots.map((s, idx) => (
+            <div
+              key={`${s.loggedAt}-${idx}`}
+              className="rounded border border-gray-200 bg-white p-3"
+            >
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-xs text-gray-500">
+                <span>
+                  Snapshot {idx + 1} · logged{" "}
+                  {new Date(s.loggedAt).toLocaleString()} · {s.hoursAfterPosting}h
+                  after posting
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveSnapshot(idx)}
+                  className="rounded border border-rose-200 px-2 py-0.5 text-[11px] text-rose-700 hover:bg-rose-50"
+                  title="Remove this snapshot"
+                >
+                  Delete snapshot
+                </button>
+              </div>
+              <MetricsFormGrid
+                metrics={s.metrics}
+                onChange={(k, v) => onSnapshotMetricChange(idx, k, v)}
+              />
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="submit"
+          className="rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black"
+        >
+          Save changes
         </button>
         <button
           type="button"
