@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   SAVE_RATE_TARGET,
   SHARE_RATE_TARGET,
@@ -17,6 +17,14 @@ import {
   type CoachPost,
   type PerfTier,
 } from "@/app/coach/lib/storage";
+import {
+  computeAverages,
+  flagOutlier,
+  isDetectionEligible,
+  MIN_POSTS_FOR_DETECTION,
+} from "@/app/coach/lib/topPostAnalysis";
+import TopPostBadge from "@/app/coach/components/TopPostBadge";
+import TopPostMode from "@/app/coach/components/TopPostMode";
 
 interface FormState {
   title: string;
@@ -49,10 +57,15 @@ function fmtRate(n: number): string {
 export default function PerformanceTracker() {
   const [posts, setPosts] = useState<CoachPost[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [topPostId, setTopPostId] = useState<string | null>(null);
 
   useEffect(() => {
     setPosts(loadPosts());
   }, []);
+
+  const averages = useMemo(() => computeAverages(posts), [posts]);
+  const detectionOn = isDetectionEligible(posts);
+  const openedPost = topPostId ? posts.find((p) => p.id === topPostId) ?? null : null;
 
   function update<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -190,14 +203,26 @@ export default function PerformanceTracker() {
               const shR = shareRate(p);
               const sTier = ratePerf(sR, SAVE_RATE_TARGET);
               const shTier = ratePerf(shR, SHARE_RATE_TARGET);
+              // Outlier detection only runs once we have enough posts to
+              // compute meaningful averages; otherwise the badge stays
+              // hidden and the user sees the "log more posts" hint below.
+              const flags = detectionOn ? flagOutlier(p, averages) : null;
               return (
                 <li
                   key={p.id}
                   className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-gray-900">
-                      {p.title}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate font-medium text-gray-900">
+                        {p.title}
+                      </span>
+                      {flags && (
+                        <TopPostBadge
+                          flags={flags}
+                          onClick={() => setTopPostId(p.id)}
+                        />
+                      )}
                     </div>
                     <div className="text-xs text-gray-500">
                       {p.datePosted} · reach {p.reach.toLocaleString()} · saves{" "}
@@ -219,6 +244,14 @@ export default function PerformanceTracker() {
                     </span>
                     <button
                       type="button"
+                      onClick={() => setTopPostId(p.id)}
+                      className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-100"
+                      title="Open Top Post Mode for this post (manual override)"
+                    >
+                      Mark as winner
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => onDelete(p.id)}
                       className="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
                       aria-label="Delete this post"
@@ -231,7 +264,25 @@ export default function PerformanceTracker() {
             })}
           </ul>
         )}
+        {posts.length > 0 && !detectionOn && (
+          <div className="mt-2 rounded border border-dashed border-gray-300 p-2 text-xs text-gray-500">
+            Log {MIN_POSTS_FOR_DETECTION - posts.length} more post{MIN_POSTS_FOR_DETECTION - posts.length === 1 ? "" : "s"} to unlock outlier detection. You can still hit{" "}
+            <em>Mark as winner</em> manually on any post.
+          </div>
+        )}
       </div>
+
+      <TopPostMode
+        open={openedPost !== null}
+        post={openedPost}
+        allPosts={posts}
+        onClose={() => setTopPostId(null)}
+        onStrategyChanged={() => {
+          /* Closing the modal will re-render Coach Mode via the parent's
+             revision counter when CoachDashboard sees the change.
+             Nothing to do here in this component itself. */
+        }}
+      />
     </section>
   );
 }

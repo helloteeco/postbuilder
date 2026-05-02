@@ -190,6 +190,20 @@ export function setEffectiveRotation(next: Rotation | null): void {
 }
 
 export function getPillarForSlot(date: Date, slot: Slot): Pillar {
+  // If Top Post Mode has locked a winning strategy, bias the AM slot
+  // toward the locked pillar on a fixed pattern of days within the
+  // 14-day window. PM slot is intentionally unaffected so the calendar
+  // still shows variety.
+  if (slot === "am") {
+    const lock = getEffectiveLock();
+    if (lock) {
+      const offset = lockDayOffsetForSlot(lock, date);
+      if (offset >= 0 && WINNING_PILLAR_OFFSETS.includes(offset)) {
+        const p = getPillarById(lock.pillarId);
+        if (p) return p;
+      }
+    }
+  }
   const rotation = getEffectiveRotation();
   const map = slot === "am" ? rotation.am : rotation.pm;
   const id = map[date.getDay()] ?? getEffectivePillars()[0]?.id ?? "personal-story";
@@ -257,13 +271,86 @@ export function getHookForDate(date: Date): HookFormula {
 
 // Hook formula for a (date, slot) pair. AM uses the day's normal hook;
 // PM rotates +2 in the formula list so the same day's two posts don't
-// share a hook structure.
+// share a hook structure. AM is biased toward the locked hook on a
+// fixed subset of days when Top Post Mode is active.
 export function getHookForSlot(date: Date, slot: Slot): HookFormula {
+  if (slot === "am") {
+    const lock = getEffectiveLock();
+    if (lock) {
+      const offset = lockDayOffsetForSlot(lock, date);
+      if (offset >= 0 && WINNING_HOOK_OFFSETS.includes(offset)) {
+        const h = HOOK_FORMULAS.find((f) => f.id === lock.hookId);
+        if (h) return h;
+      }
+    }
+  }
   const am = getHookForDate(date);
   if (slot === "am") return am;
   const amIndex = HOOK_FORMULAS.findIndex((h) => h.id === am.id);
   const pmIndex = (amIndex + 2) % HOOK_FORMULAS.length;
   return HOOK_FORMULAS[pmIndex];
+}
+
+// ── Top Post Mode lock ──────────────────────────────────────────────────
+
+export interface LockedStrategy {
+  pillarId: string;
+  hookId: string;
+  lockedAt: number;
+  expiresAt: number;
+  startDayMs: number; // local-midnight of day-zero of the bias window
+  postId: string;
+  postTitle: string;
+}
+
+// Bias pattern for the 14-day window. Same values are referenced from
+// topPostAnalysis.ts so the constants stay in sync.
+export const LOCK_DURATION_DAYS = 14;
+export const WINNING_PILLAR_OFFSETS = [0, 2, 3, 5, 7, 9, 10, 12]; // 8 of 14
+export const WINNING_HOOK_OFFSETS = [0, 3, 6, 9, 12];             // 5 of 14
+
+let effectiveLockRef: LockedStrategy | null = null;
+let lockProvider: (() => LockedStrategy | null) | null = null;
+
+// Registered by topPostAnalysis.ts at module-import time so strategy.ts
+// can read the lock from localStorage without importing topPostAnalysis
+// (which would create a circular dep). When set, getEffectiveLock reads
+// fresh from the provider on every call — keeps the lock in sync across
+// channel switches without needing to invalidate a cache.
+export function setLockProvider(
+  next: (() => LockedStrategy | null) | null,
+): void {
+  lockProvider = next;
+}
+
+export function getEffectiveLock(): LockedStrategy | null {
+  // Provider takes precedence (it reads fresh from localStorage and is
+  // channel-aware). Fall back to the in-memory ref for SSR and tests.
+  const lock = lockProvider ? lockProvider() : effectiveLockRef;
+  if (!lock) return null;
+  if (Date.now() >= lock.expiresAt) return null;
+  return lock;
+}
+
+// Explicit override for tests / SSR. In normal browser use the provider
+// is the source of truth; this slot is only consulted as a fallback.
+export function setEffectiveLock(next: LockedStrategy | null): void {
+  effectiveLockRef = next;
+}
+
+// Day offset (0..LOCK_DURATION_DAYS-1) of the given date relative to the
+// lock's day-zero. Returns -1 if the date is outside the window.
+export function lockDayOffsetForSlot(
+  lock: LockedStrategy,
+  date: Date,
+): number {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const ms = d.getTime() - lock.startDayMs;
+  if (ms < 0) return -1;
+  const day = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (day >= LOCK_DURATION_DAYS) return -1;
+  return day;
 }
 
 // Returns N topics from the given pillar's bank, never duplicating. Stable
