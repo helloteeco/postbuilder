@@ -9,7 +9,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadLoggedPosts,
   replacePost,
@@ -30,7 +30,7 @@ interface Props {
   onSaved: () => void;
 }
 
-type Tab = "link" | "paste";
+type Tab = "link" | "paste" | "upload";
 
 export default function SlideCaptureModal({
   open,
@@ -43,6 +43,10 @@ export default function SlideCaptureModal({
   const [pasteText, setPasteText] = useState("");
   const [parsed, setParsed] = useState<SlideContent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Upload tab state — JPEG-compressed data URLs of dropped/picked
+  // images, plus extraction status.
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [extracting, setExtracting] = useState(false);
 
   // Reset form state every time the modal opens for a (potentially
   // different) post.
@@ -52,6 +56,8 @@ export default function SlideCaptureModal({
     setPasteText("");
     setParsed(null);
     setError(null);
+    setUploadedImages([]);
+    setExtracting(false);
     try {
       setDrafts(loadHistory());
     } catch {
@@ -65,6 +71,143 @@ export default function SlideCaptureModal({
   }, [postId, open]);
 
   if (!open || !post) return null;
+
+  // Compress a data URL to a max-1600px JPEG so iPhone screenshots
+  // (~5-10MB each) fit inside Vercel's 4.5MB request body limit when
+  // we POST to /api/coach/extract-slides. Identical approach to the
+  // Post Builder's compress flow — kept inline here to avoid coupling
+  // the two features.
+  async function compressImageDataUrl(
+    dataUrl: string,
+    maxDim = 1600,
+    quality = 0.85,
+  ): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Canvas 2D context unavailable"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err)));
+        }
+      };
+      img.onerror = () => reject(new Error("Could not decode image"));
+      img.src = dataUrl;
+    });
+  }
+
+  async function handleFiles(files: FileList | File[]) {
+    setError(null);
+    const arr = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (arr.length === 0) return;
+    try {
+      const compressed = await Promise.all(
+        arr.map(async (f) => {
+          const reader = new FileReader();
+          const dataUrl = await new Promise<string>((res, rej) => {
+            reader.onload = () => res(reader.result as string);
+            reader.onerror = () => rej(new Error("Could not read file"));
+            reader.readAsDataURL(f);
+          });
+          return compressImageDataUrl(dataUrl);
+        }),
+      );
+      setUploadedImages((prev) => [...prev, ...compressed]);
+    } catch (e) {
+      setError(
+        `Couldn't read one of the images: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  function removeUploadedImage(index: number) {
+    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function moveUploadedImage(index: number, direction: -1 | 1) {
+    setUploadedImages((prev) => {
+      const next = prev.slice();
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  async function handleExtract() {
+    if (uploadedImages.length === 0) return;
+    setExtracting(true);
+    setError(null);
+    try {
+      const resp = await fetch("/api/coach/extract-slides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: uploadedImages }),
+      });
+      const rawText = await resp.text();
+      if (!resp.ok) {
+        if (resp.status === 413 || /entity too large|payload too large/i.test(rawText)) {
+          setError(
+            "Images too large even after compression. Try fewer images, or use the Paste tab.",
+          );
+          return;
+        }
+        setError(`Server error ${resp.status}: ${rawText.slice(0, 200)}`);
+        return;
+      }
+      let data: { ok: true; texts: string[] } | { ok: false; code: string; message: string };
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        setError("Server returned an unexpected response.");
+        return;
+      }
+      if (!data.ok) {
+        setError(`${data.code}: ${data.message}`);
+        return;
+      }
+      const slides: SlideContent[] = data.texts
+        .map((t, i) => ({
+          slideNumber: i + 1,
+          text: t,
+          isHook: i === 0,
+          isCTA: i === data.texts.length - 1,
+        }))
+        .filter((s) => s.text.trim().length > 0);
+      if (slides.length === 0) {
+        setError(
+          "Couldn't read any text from those images. Try clearer screenshots, or use the Paste tab.",
+        );
+        return;
+      }
+      // Renumber after filtering empties so slide 1 is whichever image
+      // first had readable text.
+      const renumbered = slides.map((s, i) => ({
+        ...s,
+        slideNumber: i + 1,
+        isHook: i === 0,
+        isCTA: i === slides.length - 1,
+      }));
+      setParsed(renumbered);
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   function commit(slides: SlideContent[], draftId?: string) {
     if (!post) return;
@@ -176,7 +319,7 @@ export default function SlideCaptureModal({
           </div>
         </div>
 
-        <div className="mb-4 flex gap-2">
+        <div className="mb-4 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setTab("link")}
@@ -187,6 +330,17 @@ export default function SlideCaptureModal({
             }`}
           >
             Link a Post Builder draft
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("upload")}
+            className={`rounded px-3 py-1.5 text-xs font-medium transition ${
+              tab === "upload"
+                ? "bg-gray-900 text-white"
+                : "border border-gray-300 text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            Upload slide images
           </button>
           <button
             type="button"
@@ -203,6 +357,19 @@ export default function SlideCaptureModal({
 
         {tab === "link" && (
           <LinkTab drafts={drafts} onPick={handleLinkDraft} />
+        )}
+
+        {tab === "upload" && (
+          <UploadTab
+            images={uploadedImages}
+            extracting={extracting}
+            parsed={parsed}
+            onFiles={handleFiles}
+            onRemove={removeUploadedImage}
+            onMove={moveUploadedImage}
+            onExtract={handleExtract}
+            onSave={() => parsed && commit(parsed)}
+          />
         )}
 
         {tab === "paste" && (
@@ -344,6 +511,202 @@ function PasteTab({
           <ol className="space-y-2 rounded border border-gray-200 p-3 text-xs text-gray-800">
             {parsed.map((s) => (
               <li key={s.slideNumber} className="border-b border-gray-100 pb-2 last:border-b-0 last:pb-0">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                  Slide {s.slideNumber}
+                  {s.isHook && " · hook"}
+                  {s.isCTA && " · CTA"}
+                </div>
+                <pre className="mt-0.5 whitespace-pre-wrap font-sans">{s.text}</pre>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Upload tab ────────────────────────────────────────────────────────
+//
+// Drop zone + thumbnail strip + Extract button. The extracted text
+// runs through the same analyzeContent pipeline as paste/link, so
+// downstream behavior (structural diagnosis, follow-up suggestions,
+// hook variants) is identical regardless of how the slides got in.
+
+function UploadTab({
+  images,
+  extracting,
+  parsed,
+  onFiles,
+  onRemove,
+  onMove,
+  onExtract,
+  onSave,
+}: {
+  images: string[];
+  extracting: boolean;
+  parsed: SlideContent[] | null;
+  onFiles: (files: FileList | File[]) => void;
+  onRemove: (index: number) => void;
+  onMove: (index: number, direction: -1 | 1) => void;
+  onExtract: () => void;
+  onSave: () => void;
+}) {
+  const [dragActive, setDragActive] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(true);
+  }
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+  }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      onFiles(e.dataTransfer.files);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-gray-500">
+        Drag slide screenshots in or click to pick. We&apos;ll read the
+        text off each one with Claude Vision and feed it into the same
+        structural analysis as the paste flow — so Coach Mode&apos;s
+        recommendations work the same way regardless of how the slides
+        get in.
+      </p>
+
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition ${
+          dragActive
+            ? "border-emerald-500 bg-emerald-50"
+            : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+        }`}
+      >
+        <div className="text-sm font-semibold text-gray-700">
+          Drop slide images here
+        </div>
+        <div className="mt-1 text-xs text-gray-500">
+          or click to pick — PNG, JPEG, HEIC; multiple files OK
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) onFiles(e.target.files);
+            e.target.value = ""; // allow re-uploading the same file
+          }}
+        />
+      </div>
+
+      {images.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              {images.length} image{images.length === 1 ? "" : "s"} ·
+              order = slide order
+            </div>
+            <button
+              type="button"
+              onClick={onExtract}
+              disabled={extracting}
+              className="rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black disabled:opacity-50"
+            >
+              {extracting
+                ? `Reading text from ${images.length} image${images.length === 1 ? "" : "s"}…`
+                : `Extract text from ${images.length} image${images.length === 1 ? "" : "s"}`}
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {images.map((src, i) => (
+              <div
+                key={i}
+                className="relative overflow-hidden rounded border border-gray-200 bg-gray-50"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt={`Slide ${i + 1}`}
+                  className="h-24 w-full object-cover"
+                />
+                <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                  {i + 1}
+                </span>
+                <div className="absolute right-1 top-1 flex gap-0.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMove(i, -1);
+                    }}
+                    disabled={i === 0}
+                    className="rounded bg-white/90 px-1 text-[10px] font-bold text-gray-700 hover:bg-white disabled:opacity-30"
+                    title="Move earlier"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMove(i, 1);
+                    }}
+                    disabled={i === images.length - 1}
+                    className="rounded bg-white/90 px-1 text-[10px] font-bold text-gray-700 hover:bg-white disabled:opacity-30"
+                    title="Move later"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemove(i);
+                    }}
+                    className="rounded bg-white/90 px-1 text-[10px] font-bold text-rose-700 hover:bg-white"
+                    title="Remove"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {parsed && parsed.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              Extracted text — preview
+            </div>
+            <button
+              type="button"
+              onClick={onSave}
+              className="rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black"
+            >
+              Save {parsed.length} slide{parsed.length === 1 ? "" : "s"}
+            </button>
+          </div>
+          <ol className="space-y-2 rounded border border-gray-200 p-3 text-xs text-gray-800">
+            {parsed.map((s) => (
+              <li
+                key={s.slideNumber}
+                className="border-b border-gray-100 pb-2 last:border-b-0 last:pb-0"
+              >
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
                   Slide {s.slideNumber}
                   {s.isHook && " · hook"}
