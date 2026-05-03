@@ -236,6 +236,11 @@ export default function TopPostMode({
             Targets: save rate ≥ {SAVE_RATE_TARGET}%, share rate ≥{" "}
             {SHARE_RATE_TARGET}%. Multipliers above are vs. your own average
             across {allPosts.length} logged post{allPosts.length === 1 ? "" : "s"}.
+            All numbers shown here are <strong>time-normalized to 48h</strong> —
+            so a post logged at 24h is projected forward and one logged at 7d
+            is deflated back to its likely 48h value, putting every post on
+            equal footing for comparison. Posts logged near 48h will look
+            identical to your raw notes.
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="text-xs text-gray-600">

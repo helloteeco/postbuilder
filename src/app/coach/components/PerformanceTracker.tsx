@@ -50,6 +50,7 @@ import {
   getDetectionSnapshot,
   getRecommendedNextSnapshot,
   hoursSincePost,
+  normalizeMetricsTo48h,
   type TimingBucket,
 } from "@/app/coach/lib/timingHelpers";
 import LoggingReminder from "@/app/coach/components/LoggingReminder";
@@ -231,13 +232,21 @@ export default function PerformanceTracker() {
   const pillars = getEffectivePillars();
 
   // Outlier detection runs on the CoachPost views derived from each
-  // post's detection snapshot (48h preferred). Posts without an
-  // eligible snapshot are excluded from both averages and flag checks.
+  // post's detection snapshot (48h preferred), with each snapshot's
+  // metrics normalized to its 48h-equivalent. That way a post logged
+  // at 24h is compared on equal footing with one logged at 7d — same
+  // raw numbers don't get treated as equivalent when they came in at
+  // wildly different times in the curve.
   const eligibleCoachViews: CoachPost[] = useMemo(() => {
     return detectionEligiblePosts(posts).map((p) => {
       const snap = getDetectionSnapshot(p);
       // detectionEligiblePosts already filtered, so snap is non-null.
-      return toCoachPost(p, snap as PostSnapshot);
+      const s = snap as PostSnapshot;
+      const normalized: PostSnapshot = {
+        ...s,
+        metrics: normalizeMetricsTo48h(s.metrics, s.hoursAfterPosting),
+      };
+      return toCoachPost(p, normalized);
     });
   }, [posts]);
 
@@ -248,15 +257,20 @@ export default function PerformanceTracker() {
   const detectionOn = isDetectionEligible(eligibleCoachViews);
 
   // What we pass into TopPostMode when the user clicks a badge or
-  // "Mark as winner". Uses the same snapshot-preference rule as the
-  // detection layer for consistency.
+  // "Mark as winner". Same normalization as eligibleCoachViews so the
+  // multipliers shown in the modal compare apples to apples.
   const openedView: { post: CoachPost | null; allPosts: CoachPost[] } = useMemo(() => {
     if (!topPostId) return { post: null, allPosts: eligibleCoachViews };
     const lp = posts.find((p) => p.id === topPostId);
     if (!lp) return { post: null, allPosts: eligibleCoachViews };
     const snap = snapshotForModal(lp);
+    if (!snap) return { post: null, allPosts: eligibleCoachViews };
+    const normalized: PostSnapshot = {
+      ...snap,
+      metrics: normalizeMetricsTo48h(snap.metrics, snap.hoursAfterPosting),
+    };
     return {
-      post: snap ? toCoachPost(lp, snap) : null,
+      post: toCoachPost(lp, normalized),
       allPosts: eligibleCoachViews,
     };
   }, [topPostId, posts, eligibleCoachViews]);
@@ -622,12 +636,20 @@ function PostRow({
   const sTier = ratePerf(sR, SAVE_RATE_TARGET);
   const shTier = ratePerf(shR, SHARE_RATE_TARGET);
 
-  // Outlier flag uses the detection-eligible CoachPost view; if the
-  // post has no detection snapshot yet, no flag is computed.
-  const flags =
-    detectionOn && detectionSnap
-      ? flagOutlier(toCoachPost(post, detectionSnap), averages)
-      : null;
+  // Outlier flag uses the detection-eligible CoachPost view, with
+  // metrics normalized to their 48h-equivalent so the comparison is
+  // fair across posts logged at different points in their curves.
+  const flags = (() => {
+    if (!detectionOn || !detectionSnap) return null;
+    const normalized: PostSnapshot = {
+      ...detectionSnap,
+      metrics: normalizeMetricsTo48h(
+        detectionSnap.metrics,
+        detectionSnap.hoursAfterPosting,
+      ),
+    };
+    return flagOutlier(toCoachPost(post, normalized), averages);
+  })();
 
   // Yellow border + Update CTA when the post is sitting in a reminder
   // window without an updated snapshot.

@@ -112,3 +112,130 @@ export function classifyTiming(hoursSincePosting: number): TimingBucket {
   if (hoursSincePosting < 7 * 24) return "lateOk";
   return "mature";
 }
+
+// ── Time normalization ────────────────────────────────────────────────
+//
+// Instagram metrics aren't done at the moment they're logged — reach
+// climbs for ~7 days, saves accumulate for 2-3 weeks, shares mostly
+// settle by 48h. Two posts with the same raw numbers but logged at
+// different points in their curves represent very different audience
+// responses (e.g. "600 reach at 24h" >>> "600 reach at 14 days").
+//
+// To compare posts fairly, we normalize each snapshot back to its
+// 48-hour-equivalent — what the metric likely WAS / WILL BE at 48h
+// based on the fraction of the curve that's elapsed. Posts logged at
+// exactly 48h are a no-op (curve factor = 1.0). Earlier posts scale
+// UP (their numbers are still climbing). Later posts scale DOWN
+// (their numbers have already accumulated past the 48h mark).
+//
+// The curves below are piecewise-linear approximations of the standard
+// Instagram metric trajectory. Tunable as the team gathers real data.
+// For now they're documented anchor points the curve passes through:
+//
+//   reach:  f(0)=0.10  f(24)=0.65  f(48)=1.00  f(72)=1.10  f(168)=1.30  f(336)=1.40  f(720)=1.55
+//   saves:  f(0)=0.05  f(24)=0.70  f(48)=1.00  f(72)=1.15  f(168)=1.55  f(336)=1.80  f(720)=2.10
+//   shares: f(0)=0.40  f(24)=0.85  f(48)=1.00  f(72)=1.05  f(168)=1.10  f(336)=1.12  f(720)=1.15
+//
+// (Saves keep growing the longest; shares finish the fastest.)
+
+import type { PostMetrics } from "./storage";
+
+// Anchor points. Each pair is [hoursAfterPosting, fractionOf48hValue].
+// Must be ordered by hour, ascending, with f(48) === 1.0 as the pivot.
+const REACH_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0.10],
+  [24, 0.65],
+  [48, 1.0],
+  [72, 1.10],
+  [168, 1.30],
+  [336, 1.40],
+  [720, 1.55],
+];
+
+const SAVES_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0.05],
+  [24, 0.70],
+  [48, 1.0],
+  [72, 1.15],
+  [168, 1.55],
+  [336, 1.80],
+  [720, 2.10],
+];
+
+const SHARES_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0.40],
+  [24, 0.85],
+  [48, 1.0],
+  [72, 1.05],
+  [168, 1.10],
+  [336, 1.12],
+  [720, 1.15],
+];
+
+// Linear interpolation between anchor points. Clamps outside the
+// declared range.
+function interpolate(
+  hours: number,
+  anchors: ReadonlyArray<readonly [number, number]>,
+): number {
+  if (hours <= anchors[0][0]) return anchors[0][1];
+  if (hours >= anchors[anchors.length - 1][0]) {
+    return anchors[anchors.length - 1][1];
+  }
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const [h1, v1] = anchors[i];
+    const [h2, v2] = anchors[i + 1];
+    if (hours >= h1 && hours <= h2) {
+      const t = (hours - h1) / (h2 - h1);
+      return v1 + t * (v2 - v1);
+    }
+  }
+  return 1.0;
+}
+
+export function reachCurveFraction(hours: number): number {
+  return interpolate(hours, REACH_ANCHORS);
+}
+export function savesCurveFraction(hours: number): number {
+  return interpolate(hours, SAVES_ANCHORS);
+}
+export function sharesCurveFraction(hours: number): number {
+  return interpolate(hours, SHARES_ANCHORS);
+}
+
+// Returns the metric's projected 48h-equivalent value. metric / curve(h).
+// Guards against divide-by-zero with a tiny floor.
+function project(metric: number, fraction: number): number {
+  if (!metric) return 0;
+  const f = Math.max(0.05, fraction);
+  return Math.round(metric / f);
+}
+
+// Normalize a snapshot's metrics back to its 48h-equivalent using the
+// curves above. Reach / saves / shares are normalized independently;
+// likes / comments / profileVisits / follows are passed through
+// unchanged because we don't currently use them in detection (and
+// their curves vary too much by post type to assume a default).
+export function normalizeMetricsTo48h(
+  metrics: PostMetrics,
+  hoursAfterPosting: number,
+): PostMetrics {
+  return {
+    reach: project(metrics.reach, reachCurveFraction(hoursAfterPosting)),
+    saves: project(metrics.saves, savesCurveFraction(hoursAfterPosting)),
+    shares: project(metrics.shares, sharesCurveFraction(hoursAfterPosting)),
+    likes: metrics.likes,
+    comments: metrics.comments,
+    profileVisits: metrics.profileVisits,
+    follows: metrics.follows,
+  };
+}
+
+// Returns true when normalization meaningfully changes the snapshot's
+// numbers — i.e. the snapshot was NOT logged at the 48h reference. Used
+// by the UI to decide whether to show the "values normalized to 48h"
+// note. Anything inside the 36-72h window is close enough that we
+// consider it the canonical read.
+export function snapshotIsNormalized(hoursAfterPosting: number): boolean {
+  return hoursAfterPosting < 36 || hoursAfterPosting > 72;
+}
