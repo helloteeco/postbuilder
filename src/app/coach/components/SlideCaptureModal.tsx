@@ -84,6 +84,28 @@ export default function SlideCaptureModal({
     onClose();
   }
 
+  function clearSlides() {
+    if (!post) return;
+    if (
+      !confirm(
+        "Clear the slides + structural analysis from this post? Top Post Mode will fall back to metadata-only diagnosis until new slides are added.",
+      )
+    ) {
+      return;
+    }
+    const updated: LoggedPost = {
+      ...post,
+      slides: undefined,
+      contentAnalysis: undefined,
+      postBuilderDraftId: undefined,
+    };
+    replacePost(updated);
+    onSaved();
+    onClose();
+  }
+
+  const hasExistingSlides = (post.slides?.length ?? 0) > 0;
+
   function handleLinkDraft(draft: SavedPost) {
     const slides = slidesFromPostBuilder(draft.slides);
     commit(slides, draft.id);
@@ -133,13 +155,25 @@ export default function SlideCaptureModal({
               generate way more specific follow-up recommendations.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            {hasExistingSlides && (
+              <button
+                type="button"
+                onClick={clearSlides}
+                className="rounded border border-rose-200 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                title="Remove the slides + structural analysis from this post"
+              >
+                Clear slides
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="mb-4 flex gap-2">

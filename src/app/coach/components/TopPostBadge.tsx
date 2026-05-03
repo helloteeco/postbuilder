@@ -32,8 +32,8 @@ export default function TopPostBadge({ flags, onClick }: Props) {
   if (!flags.any) return null;
   const top = topMultiplier(flags);
   const tooltip = top
-    ? `${top.value.toFixed(1)}× your average ${top.label} — open Top Post Mode`
-    : "Outperforming post — open Top Post Mode";
+    ? `${top.value.toFixed(1)}× your average ${top.label} (time-normalized to 48h equivalent so posts logged at different times compare fairly) — open Top Post Mode`
+    : "Outperforming post (time-normalized comparison) — open Top Post Mode";
   return (
     <button
       type="button"

@@ -406,6 +406,22 @@ export default function PerformanceTracker() {
     // stays accurate.
     const newPostedAtIso = dateTimeLocalToIso(d.postedAt);
     const newPostedAtMs = new Date(newPostedAtIso).getTime();
+
+    // Validate: postedAt must be on or before every snapshot's loggedAt.
+    // Otherwise hoursAfterPosting clamps to 0 and the normalization
+    // curve floor multiplies metrics ~1.67×, creating false outliers.
+    const invalidSnap = d.snapshots.find((s) => {
+      const loggedMs = new Date(s.loggedAt).getTime();
+      return !Number.isNaN(loggedMs) && loggedMs < newPostedAtMs;
+    });
+    if (invalidSnap) {
+      const loggedAtFmt = new Date(invalidSnap.loggedAt).toLocaleString();
+      alert(
+        `Posted-at (${new Date(newPostedAtIso).toLocaleString()}) is after one of this post's snapshots was logged (${loggedAtFmt}). The post must go live before any snapshot is taken — fix the time and try again.`,
+      );
+      return;
+    }
+
     const updated: LoggedPost = {
       ...original,
       title: d.title.trim() || original.title,

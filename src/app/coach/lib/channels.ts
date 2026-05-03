@@ -29,12 +29,16 @@ export const DEFAULT_CHANNEL_ID = "main";
 export const DEFAULT_CHANNEL_NAME = "Main";
 
 // Suffixes of every channel-scoped storage key. Used by the migration
-// to walk legacy unprefixed keys into the Main channel.
+// to walk legacy unprefixed keys into the Main channel, by deleteChannel
+// to wipe a channel cleanly, and by exportChannel / importChannel to
+// round-trip a channel's full state.
 const SCOPED_SUFFIXES = [
   "custom_pillars",
   "custom_rotation",
   "custom_settings",
   "posts",
+  "locked_strategy",
+  "dismissed_reminders",
 ] as const;
 
 function isBrowser(): boolean {
@@ -141,6 +145,68 @@ export function deleteChannel(id: string): Channel | null {
     setCurrentChannelId(remaining[0].id);
   }
   return remaining[0];
+}
+
+// ── Export / Import ────────────────────────────────────────────────────
+//
+// Round-trips a channel's full state as a single JSON document so users
+// can back up their data, restore after a browser wipe, or share a
+// pillars+schedule+settings setup with someone else. Imports always
+// create a NEW channel so there's no risk of accidentally overwriting
+// the active workspace.
+
+export interface ChannelExport {
+  version: 1;
+  channelName: string;
+  exportedAt: number;
+  // Map of suffix → raw localStorage value (JSON-encoded string), or
+  // null when that key isn't set. Storing the raw values lets the
+  // import code write them back without parsing/re-serializing each
+  // shape.
+  data: Record<string, string | null>;
+}
+
+export function exportChannel(
+  channelId: string,
+  channelName: string,
+): ChannelExport {
+  const data: Record<string, string | null> = {};
+  if (isBrowser()) {
+    for (const suffix of SCOPED_SUFFIXES) {
+      try {
+        data[suffix] = localStorage.getItem(channelKey(channelId, suffix));
+      } catch {
+        data[suffix] = null;
+      }
+    }
+  }
+  return {
+    version: 1,
+    channelName,
+    exportedAt: Date.now(),
+    data,
+  };
+}
+
+// Imports the export into a brand-new channel. Returns the new
+// channel so the caller can switch to it. The new channel's name is
+// the export's channelName + " (imported)" to make it clear what
+// happened, and to avoid name collisions.
+export function importChannel(exported: ChannelExport): Channel | null {
+  if (!exported || exported.version !== 1) return null;
+  const baseName = (exported.channelName || "Imported channel").trim();
+  const channel = createChannel(`${baseName} (imported)`);
+  if (!isBrowser()) return channel;
+  for (const suffix of SCOPED_SUFFIXES) {
+    const raw = exported.data?.[suffix];
+    if (typeof raw !== "string") continue;
+    try {
+      localStorage.setItem(channelKey(channel.id, suffix), raw);
+    } catch {
+      // ignore quota — partial import beats no import
+    }
+  }
+  return channel;
 }
 
 // One-time bootstrap. Idempotent. Run on every Coach Mode mount.

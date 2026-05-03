@@ -84,15 +84,37 @@ export default function TopPostMode({
   const [hookId, setHookId] = useState<string>("");
   const [confirmation, setConfirmation] = useState<string | null>(null);
 
-  // Pre-fill pillar/hook from inferred metadata each time the modal
-  // opens for a new post.
+  // Pre-fill pillar/hook each time the modal opens for a new post.
+  // Prefer the values explicitly stored on the LoggedPost (set when
+  // the user logged the post via the multi-step form). Only fall back
+  // to date-based inference for legacy migrated posts that don't have
+  // those fields filled in.
   useEffect(() => {
     if (!open || !post) return;
-    const meta = inferPostMetadata(post);
-    setPillarId(meta.pillar?.id ?? getEffectivePillars()[0]?.id ?? "");
-    setHookId(meta.hook?.id ?? HOOK_FORMULAS[0]?.id ?? "");
+    const storedPillar = loggedPost?.pillar?.trim();
+    const storedHook = loggedPost?.hookFormula?.trim();
+    const storedPillarValid =
+      storedPillar && getEffectivePillars().some((p) => p.id === storedPillar);
+    const storedHookValid =
+      storedHook && HOOK_FORMULAS.some((h) => h.id === storedHook);
+    if (storedPillarValid && storedHookValid) {
+      setPillarId(storedPillar);
+      setHookId(storedHook);
+    } else {
+      const meta = inferPostMetadata(post);
+      setPillarId(
+        (storedPillarValid ? storedPillar : meta.pillar?.id) ??
+          getEffectivePillars()[0]?.id ??
+          "",
+      );
+      setHookId(
+        (storedHookValid ? storedHook : meta.hook?.id) ??
+          HOOK_FORMULAS[0]?.id ??
+          "",
+      );
+    }
     setConfirmation(null);
-  }, [open, post]);
+  }, [open, post, loggedPost]);
 
   const averages: AveragesSummary = useMemo(
     () => computeAverages(allPosts),

@@ -62,14 +62,19 @@ export function getRecommendedNextSnapshot(post: LoggedPost): {
   const now = hoursSincePost(post.postedAt);
   const snapCount = post.snapshots.length;
 
-  // 48h checkpoint
+  // 48h checkpoint — sticky from 48h until 7d so the reminder doesn't
+  // disappear if the user happens not to open the app between hour 48
+  // and hour 72. After 7d the 7d reminder takes over.
   const has48h = post.snapshots.some(
     (s) => s.hoursAfterPosting >= 36 && s.hoursAfterPosting <= 72,
   );
   const onlyPreliminary =
     snapCount === 1 && post.snapshots[0].hoursAfterPosting < 36;
   const eligibleFor48h =
-    !has48h && (snapCount === 0 || onlyPreliminary) && now >= 48 && now <= 72;
+    !has48h &&
+    (snapCount === 0 || onlyPreliminary) &&
+    now >= 48 &&
+    now <= 7 * 24;
   if (eligibleFor48h && !isReminderDismissed(post.id, "h48")) {
     return {
       shouldLog: true,
@@ -79,14 +84,16 @@ export function getRecommendedNextSnapshot(post: LoggedPost): {
     };
   }
 
-  // 7d checkpoint — only after we've passed 48h and post has 1-2 snaps
+  // 7d checkpoint — sticky from 7d until 21d. Wider window so users
+  // who only open the app weekly still get nudged to capture the late
+  // reach + saves climb that finishes around the 2-week mark.
   const has7d = post.snapshots.some((s) => s.hoursAfterPosting >= 7 * 24);
   const eligibleFor7d =
     !has7d &&
     snapCount >= 1 &&
     snapCount <= 2 &&
     now >= 7 * 24 &&
-    now <= 10 * 24;
+    now <= 21 * 24;
   if (eligibleFor7d && !isReminderDismissed(post.id, "d7")) {
     return {
       shouldLog: true,
@@ -203,11 +210,24 @@ export function sharesCurveFraction(hours: number): number {
   return interpolate(hours, SHARES_ANCHORS);
 }
 
-// Returns the metric's projected 48h-equivalent value. metric / curve(h).
-// Guards against divide-by-zero with a tiny floor.
+// Hard bounds on the curve factor so a single mis-tuned anchor (or a
+// post logged at an extreme time) can't multiply or divide a metric
+// wildly. The clamp range [0.6, 2.0] caps the projection at 1.67×
+// (for posts logged early in the curve) and the deflation at 0.5×
+// (for posts logged late). The curves themselves were derived from
+// intuition about IG metric behavior, not empirical data — these
+// clamps bound the blast radius if those intuitions are off.
+const NORMALIZATION_CLAMP_MIN = 0.6;
+const NORMALIZATION_CLAMP_MAX = 2.0;
+
+// Returns the metric's projected 48h-equivalent value. metric / curve(h),
+// with the curve factor clamped to [0.6, 2.0] for safety.
 function project(metric: number, fraction: number): number {
   if (!metric) return 0;
-  const f = Math.max(0.05, fraction);
+  const f = Math.min(
+    NORMALIZATION_CLAMP_MAX,
+    Math.max(NORMALIZATION_CLAMP_MIN, fraction),
+  );
   return Math.round(metric / f);
 }
 

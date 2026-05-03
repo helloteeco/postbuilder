@@ -20,11 +20,14 @@ import {
   createChannel,
   deleteChannel,
   ensureChannelsInitialized,
+  exportChannel,
   getCurrentChannelId,
+  importChannel,
   loadChannels,
   renameChannel,
   setCurrentChannelId,
   type Channel,
+  type ChannelExport,
 } from "@/app/coach/lib/channels";
 
 export interface SelectedSlot {
@@ -90,15 +93,65 @@ export default function CoachDashboard() {
     if (channels.length <= 1) return;
     const current = channels.find((c) => c.id === activeChannelId);
     if (!current) return;
-    if (
-      !confirm(
-        `Delete channel "${current.name}"? This wipes its pillars, schedule, settings, and performance log. Other channels are unaffected.`,
-      )
-    ) {
-      return;
-    }
+    // Typed confirmation — destructive op deserves more than a one-click
+    // OK. The user must literally type DELETE to confirm.
+    const typed = prompt(
+      `Delete channel "${current.name}"?\n\nThis wipes EVERYTHING for this channel — pillars, schedule, settings, every logged post, every snapshot, every captured slide deck and structural analysis, plus the active locked strategy. Other channels are unaffected. There is no undo.\n\nType DELETE (in caps) to confirm:`,
+      "",
+    );
+    if (typed !== "DELETE") return;
     deleteChannel(current.id);
     refreshAfterChannelChange();
+  }
+
+  function handleExport() {
+    const current = channels.find((c) => c.id === activeChannelId);
+    if (!current || typeof document === "undefined") return;
+    const exported = exportChannel(current.id, current.name);
+    const blob = new Blob([JSON.stringify(exported, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safeName = current.name.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase();
+    a.href = url;
+    a.download = `coach-mode-${safeName}-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImport() {
+    if (typeof document === "undefined") return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text) as ChannelExport;
+        if (!parsed || parsed.version !== 1 || typeof parsed.channelName !== "string") {
+          alert(
+            "That doesn't look like a Coach Mode export — expected a JSON file produced by the Export button.",
+          );
+          return;
+        }
+        const newChannel = importChannel(parsed);
+        if (!newChannel) {
+          alert("Couldn't import — the file looked valid but writing it failed.");
+          return;
+        }
+        setCurrentChannelId(newChannel.id);
+        refreshAfterChannelChange();
+      } catch {
+        alert("Couldn't read that file. Make sure it's a valid Coach Mode JSON export.");
+      }
+    };
+    input.click();
   }
 
   function handleSelectSlot(s: SelectedSlot) {
@@ -152,10 +205,26 @@ export default function CoachDashboard() {
           </button>
           <button
             type="button"
+            onClick={handleExport}
+            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+            title="Download this channel's data as a JSON backup"
+          >
+            Export
+          </button>
+          <button
+            type="button"
+            onClick={handleImport}
+            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+            title="Load a channel from a JSON export — creates a new channel, never overwrites the active one"
+          >
+            Import
+          </button>
+          <button
+            type="button"
             onClick={handleDelete}
             disabled={!canDelete}
             className="rounded border border-gray-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:opacity-40"
-            title={canDelete ? "Delete this channel" : "Need at least one channel"}
+            title={canDelete ? "Delete this channel (requires typed confirmation)" : "Need at least one channel"}
           >
             Delete
           </button>
