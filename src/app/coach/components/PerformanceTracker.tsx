@@ -37,7 +37,14 @@ import {
   type PerfTier,
   type PostMetrics,
   type PostSnapshot,
+  type SlideContent,
 } from "@/app/coach/lib/storage";
+import { analyzeContent } from "@/app/coach/lib/contentAnalysis";
+import {
+  loadPendingDrafts,
+  removePendingDraft,
+  type PendingDraft,
+} from "@/app/coach/lib/pendingDraft";
 import {
   computeAverages,
   detectionEligiblePosts,
@@ -77,6 +84,12 @@ interface NewPostDraft {
   pillar: string;
   hookFormula: string;
   metrics: MetricsForm;
+  // When the form was prefilled from a Post Builder handoff. After
+  // save we attach these slides + run structural analysis, then drop
+  // the pending draft from the queue. Absent for from-scratch logs.
+  pendingDraftId?: string;
+  pendingSlides?: SlideContent[];
+  pendingPostBuilderDraftId?: string;
 }
 
 interface UpdateDraft {
@@ -224,9 +237,30 @@ export default function PerformanceTracker() {
   const [slideCaptureFor, setSlideCaptureFor] = useState<string | null>(null);
   // Bumped on dismissal so LoggingReminder re-evaluates after a skip.
   const [reminderRev, setReminderRev] = useState(0);
+  // Drafts handed off from the Post Builder, awaiting log. Mount load +
+  // live update via the coach-pending-drafts-changed CustomEvent so a
+  // user with both /coach and / open in separate tabs sees new drafts
+  // appear without a reload.
+  const [pendingDrafts, setPendingDrafts] = useState<PendingDraft[]>([]);
 
   useEffect(() => {
     setPosts(loadLoggedPosts());
+    setPendingDrafts(loadPendingDrafts());
+    function refreshPending() {
+      setPendingDrafts(loadPendingDrafts());
+    }
+    window.addEventListener("coach-pending-drafts-changed", refreshPending);
+    // Cross-tab: storage event fires on the other tab when localStorage
+    // changes. Catches the case where the Post Builder lives in another
+    // tab on the same origin.
+    function onStorage(e: StorageEvent) {
+      if (e.key === "coach_pending_drafts") refreshPending();
+    }
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("coach-pending-drafts-changed", refreshPending);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   const pillars = getEffectivePillars();
@@ -279,6 +313,52 @@ export default function PerformanceTracker() {
 
   function startNewDraft() {
     setDraft(emptyNewDraft(pillars));
+  }
+
+  // Pre-fill the new-post form from a Post Builder handoff. Title +
+  // slides come from the pending draft; postedAt / pillar / hook /
+  // metrics still need to be filled in manually since the post may
+  // not be live yet.
+  function startNewDraftFromPending(pending: PendingDraft) {
+    const base = emptyNewDraft(pillars);
+    setDraft({
+      ...base,
+      title: pending.title,
+      pendingDraftId: pending.id,
+      pendingSlides: pending.slides,
+      pendingPostBuilderDraftId: pending.postBuilderDraftId,
+    });
+  }
+
+  function discardPending(id: string) {
+    removePendingDraft(id);
+    setPendingDrafts(loadPendingDrafts());
+  }
+
+  // After addLoggedPost succeeds, attach slides + structural analysis
+  // (mirrors SlideCaptureModal.commit) and drop the pending draft from
+  // the queue. Called by both saveNewWithMetrics and
+  // saveNewWithoutMetrics so either flow works seamlessly with a
+  // pending handoff.
+  function attachPendingSlidesAndCleanup(
+    d: NewPostDraft,
+    newPostId: string,
+  ) {
+    if (!d.pendingSlides || d.pendingSlides.length === 0) return;
+    const all = loadLoggedPosts();
+    const post = all.find((p) => p.id === newPostId);
+    if (!post) return;
+    const analysis = analyzeContent(d.pendingSlides);
+    replacePost({
+      ...post,
+      slides: d.pendingSlides,
+      contentAnalysis: analysis,
+      postBuilderDraftId: d.pendingPostBuilderDraftId,
+    });
+    if (d.pendingDraftId) {
+      removePendingDraft(d.pendingDraftId);
+      setPendingDrafts(loadPendingDrafts());
+    }
   }
 
   function startUpdateDraft(post: LoggedPost) {
@@ -358,7 +438,7 @@ export default function PerformanceTracker() {
     if (!d.title.trim()) return;
     const isoPostedAt = dateTimeLocalToIso(d.postedAt);
     const hours = hoursSincePost(isoPostedAt);
-    addLoggedPost({
+    const created = addLoggedPost({
       title: d.title.trim(),
       postedAt: isoPostedAt,
       pillar: d.pillar,
@@ -366,6 +446,7 @@ export default function PerformanceTracker() {
       initialMetrics: metricsFromForm(d.metrics),
       initialHoursAfterPosting: isPreliminary ? Math.round(hours) : Math.round(hours),
     });
+    attachPendingSlidesAndCleanup(d, created.id);
     setPosts(loadLoggedPosts());
     setDraft(null);
   }
@@ -374,12 +455,13 @@ export default function PerformanceTracker() {
   // LoggingReminder component will surface it once 48-72h has passed.
   function saveNewWithoutMetrics(d: NewPostDraft) {
     if (!d.title.trim()) return;
-    addLoggedPost({
+    const created = addLoggedPost({
       title: d.title.trim(),
       postedAt: dateTimeLocalToIso(d.postedAt),
       pillar: d.pillar,
       hookFormula: d.hookFormula,
     });
+    attachPendingSlidesAndCleanup(d, created.id);
     setPosts(loadLoggedPosts());
     setDraft(null);
   }
@@ -487,6 +569,66 @@ export default function PerformanceTracker() {
         onLogUpdate={(p) => startUpdateDraft(p)}
         onChanged={bumpReminderRev}
       />
+
+      {draft === null && pendingDrafts.length > 0 && (
+        <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-indigo-800">
+                {pendingDrafts.length === 1
+                  ? "Draft from Post Builder"
+                  : `${pendingDrafts.length} drafts from Post Builder`}
+              </div>
+              <div className="text-xs text-indigo-900/80">
+                Title + slides are ready. Click <em>Use this draft</em> to log it
+                — you&apos;ll add the time posted and metrics on the next screen.
+              </div>
+            </div>
+          </div>
+          <ul className="space-y-1.5">
+            {pendingDrafts.map((pd) => (
+              <li
+                key={pd.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border border-indigo-200 bg-white px-3 py-2 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-gray-900">
+                    {pd.title}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {pd.slides.length} slide{pd.slides.length === 1 ? "" : "s"}
+                    {" · queued "}
+                    {new Date(pd.createdAt).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startNewDraftFromPending(pd)}
+                    className="rounded bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
+                  >
+                    Use this draft
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => discardPending(pd.id)}
+                    className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
+                    aria-label="Discard this draft"
+                    title="Discard — won't log this post"
+                  >
+                    ×
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {draft === null && (
         <div className="mb-6">
@@ -825,11 +967,21 @@ function NewPostForm({
     onSubmitWithMetrics(bucket === "preliminary");
   }
 
+  const pendingSlideCount = draft.pendingSlides?.length ?? 0;
+
   return (
     <form
       onSubmit={submit}
       className="mb-6 space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4"
     >
+      {pendingSlideCount > 0 && (
+        <div className="rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+          <span className="font-semibold">From Post Builder:</span>{" "}
+          title pre-filled, {pendingSlideCount} slide
+          {pendingSlideCount === 1 ? "" : "s"} will attach automatically when you
+          save (no need to click <em>Add slides</em> after).
+        </div>
+      )}
       <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
         Step 1 — Choose the post
       </div>

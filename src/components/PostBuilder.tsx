@@ -30,6 +30,7 @@ import SlideEditor from "@/components/post-builder/SlideEditor";
 import SlidePreviewGrid from "@/components/post-builder/SlidePreviewGrid";
 import CaptionPanel from "@/components/post-builder/CaptionPanel";
 import ExportBar from "@/components/post-builder/ExportBar";
+import SendToTrackerButton from "@/components/post-builder/SendToTrackerButton";
 
 interface AnalyzeOk {
   ok: true;
@@ -360,6 +361,10 @@ export default function PostBuilder() {
           >
             DIY in Canva
           </button>
+          <SendToTrackerButton
+            slides={slides}
+            historyId={activeHistoryId}
+          />
           <ExportBar
             slideCount={slides.length}
             getSlideNodes={() =>
