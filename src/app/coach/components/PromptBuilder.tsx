@@ -19,11 +19,18 @@ import {
 import {
   SAVE_RATE_TARGET,
   SHARE_RATE_TARGET,
-  loadPosts,
+  loadLoggedPosts,
   saveRate,
   shareRate,
+  toCoachPost,
   type CoachPost,
+  type LoggedPost,
+  type PostSnapshot,
 } from "@/app/coach/lib/storage";
+import {
+  getDetectionSnapshot,
+  normalizeMetricsTo48h,
+} from "@/app/coach/lib/timingHelpers";
 import type { SelectedSlot } from "./CoachDashboard";
 
 interface CtaOption {
@@ -47,28 +54,94 @@ function compositeScore(p: CoachPost): number {
   return saveRate(p) / SAVE_RATE_TARGET + (shareRate(p) / SHARE_RATE_TARGET) * 2.5;
 }
 
+// Score a LoggedPost using its detection snapshot's normalized metrics
+// — same fairness rule as the Top Post Mode badges. Returns null when
+// the post can't be evaluated (no settled snapshot yet).
+interface ScoredPost {
+  cv: CoachPost; // 48h-equivalent flat view, used for rate display
+  lp: LoggedPost; // full record, used for contentAnalysis + slide text
+  score: number;
+}
+
+function scorePost(lp: LoggedPost): ScoredPost | null {
+  const snap = getDetectionSnapshot(lp);
+  if (!snap) return null;
+  const normalized: PostSnapshot = {
+    ...snap,
+    metrics: normalizeMetricsTo48h(snap.metrics, snap.hoursAfterPosting),
+  };
+  const cv = toCoachPost(lp, normalized);
+  return { cv, lp, score: compositeScore(cv) };
+}
+
 interface LearningContext {
-  winners: CoachPost[];
-  losers: CoachPost[];
+  winners: ScoredPost[];
+  losers: ScoredPost[];
   totalLogged: number;
 }
 
-function pickLearningContext(posts: CoachPost[]): LearningContext {
-  const sorted = posts.slice().sort((a, b) => compositeScore(b) - compositeScore(a));
+function pickLearningContext(loggedPosts: LoggedPost[]): LearningContext {
+  const scored: ScoredPost[] = loggedPosts
+    .map(scorePost)
+    .filter((x): x is ScoredPost => x !== null);
+  const sorted = scored.slice().sort((a, b) => b.score - a.score);
   const winners = sorted.slice(0, 3);
   const losers = sorted.slice(-2).reverse();
-  // Avoid winners and losers overlapping when there are <5 logged.
-  const winnerIds = new Set(winners.map((p) => p.id));
-  const filteredLosers = losers.filter((p) => !winnerIds.has(p.id));
+  // Avoid winners and losers overlapping when there are <5 eligible posts.
+  const winnerIds = new Set(winners.map((s) => s.lp.id));
+  const filteredLosers = losers.filter((s) => !winnerIds.has(s.lp.id));
   return {
     winners,
     losers: filteredLosers,
-    totalLogged: posts.length,
+    totalLogged: scored.length,
   };
 }
 
-function postLine(p: CoachPost): string {
-  return `  • "${p.title}" (posted ${p.datePosted}) — save rate ${saveRate(p).toFixed(2)}%, share rate ${shareRate(p).toFixed(2)}%`;
+// Compact one-liner for a winner/loser entry. When contentAnalysis is
+// available, includes the structural fingerprint so Claude knows WHY
+// the post performed (or didn't) at a structural level — not just the
+// metric outcome.
+function postLine(s: ScoredPost): string {
+  const a = s.lp.contentAnalysis;
+  const head = `  • "${s.cv.title}" (${s.cv.datePosted}, save ${saveRate(s.cv).toFixed(2)}%, share ${shareRate(s.cv).toFixed(2)}%)`;
+  if (!a) return head;
+  const fp: string[] = [];
+  if (a.formatType !== "unknown") fp.push(`format: ${a.formatType.replace(/_/g, " ")}`);
+  fp.push(`${a.slideCount} slides, ~${a.averageSlideLength} words/slide`);
+  if (a.hookStyle !== "unknown") fp.push(`hook: ${a.hookStyle.replace(/_/g, " ")}`);
+  if (a.dollarAmounts.length > 0) {
+    fp.push(`$ amounts: ${a.dollarAmounts.slice(0, 5).join(", ")}`);
+  }
+  if (a.namedCities.length > 0) fp.push(`cities: ${a.namedCities.slice(0, 5).join(", ")}`);
+  if (a.namedPeople.length > 0) fp.push(`people: ${a.namedPeople.join(", ")}`);
+  if (a.namedBrands.length > 0) fp.push(`brands: ${a.namedBrands.slice(0, 5).join(", ")}`);
+  if (a.boldedTerms.length > 0) fp.push(`bolded: ${a.boldedTerms.slice(0, 6).join(", ")}`);
+  if (a.ctaPattern !== "unknown") {
+    fp.push(`CTA: ${a.ctaPattern.replace(/_/g, " ")}${a.ctaKeyword ? ` "${a.ctaKeyword}"` : ""}`);
+  }
+  return `${head}\n      ${fp.join(" · ")}`;
+}
+
+// Full slide-by-slide dump of the #1 winner. Gives Claude the actual
+// writing it should mirror — pacing, sentence length, specificity,
+// bolding cadence. Empty when the top winner has no captured slides.
+function deepStudyBlock(top: ScoredPost | undefined): string {
+  if (!top || !top.lp.slides || top.lp.slides.length === 0) return "";
+  const slideText = top.lp.slides
+    .map((s) => `Slide ${s.slideNumber}${s.isHook ? " (hook)" : s.isCTA ? " (CTA)" : ""}:\n${s.text}`)
+    .join("\n\n");
+  return `
+
+DEEP-STUDY YOUR #1 WINNER ("${top.cv.title}"):
+This post outperformed your average. The slide-by-slide content is below.
+MIRROR its structural pattern in the new post:
+  - same format type and slide count
+  - same hook style for Section 1
+  - same level of specificity (concrete numbers, named places, named people)
+  - same bolding cadence (which words get **bolded**)
+  - same CTA pattern
+
+${slideText}`;
 }
 
 function buildPrompt({
@@ -97,7 +170,7 @@ function buildPrompt({
   // fabricated examples.
   let learningBlock: string;
   if (learning.totalLogged === 0) {
-    learningBlock = `(No prior post performance logged yet. Lean on the pillar + hook formula above. As more posts are logged in the Coach Mode tracker, this section will fill in with what's worked.)`;
+    learningBlock = `(No prior post performance logged yet. Lean on the pillar + hook formula above. As more posts are logged in the Coach Mode tracker — and slide content captured — this section will fill in with what's worked structurally, not just by metrics.)`;
   } else {
     const winnerLines =
       learning.winners.length > 0
@@ -107,13 +180,14 @@ function buildPrompt({
       learning.losers.length > 0
         ? learning.losers.map(postLine).join("\n")
         : "  (none yet)";
-    learningBlock = `Top-performing posts so far (use these patterns — angles, hook structures, level of specificity):
+    const deepStudy = deepStudyBlock(learning.winners[0]);
+    learningBlock = `Top-performing posts so far — mirror their structural patterns (format, slide count, hook style, specificity, bolding, CTA pattern). The fingerprint after each post tells you HOW it was structured:
 ${winnerLines}
 
-Underperforming posts (avoid these patterns — whatever made these flat shouldn't repeat):
+Underperforming posts — avoid these structural patterns:
 ${loserLines}
 
-Targets to beat: save rate ≥${SAVE_RATE_TARGET}%, share rate ≥${SHARE_RATE_TARGET}%.`;
+Targets to beat: save rate ≥${SAVE_RATE_TARGET}%, share rate ≥${SHARE_RATE_TARGET}%.${deepStudy}`;
   }
 
   return `You are a ghostwriter for a real estate investor who teaches W2 high earners how to use rural Airbnbs to build wealth and replace W2 income.
@@ -144,7 +218,14 @@ STRUCTURE:
 - Section 10: CTA — direct readers to DM "${ctaKeyword}". Use the promise EXACTLY as written above ("${ctaPromise}") — do NOT invent, expand, or describe what's inside it. Don't promise modules, lessons, PDFs, checklists, spreadsheets, or anything else not literally written above. If the promise is "a free mini course", say "free mini course" — nothing more.
 
 HARD RULES:
-- Match the angles and specificity of the top-performing posts above. Avoid the patterns of the underperformers.
+- MATCH THE STRUCTURAL PATTERN of the top-performing posts above. Specifically:
+  * Same FORMAT TYPE as the #1 winner (list / story / math walkthrough / before-after / contrarian / framework). If the winner is a list, this post is a list. If the winner is a math walkthrough, this post does math.
+  * Same HOOK STYLE for Section 1 (counter-intuitive / list-promise / news-driven / specific-number / question).
+  * Same SPECIFICITY DENSITY — if the winner had 4 named cities and 3 dollar amounts, target a similar density. Borrow from the winner's named entities where the topic allows.
+  * Same BOLDING CADENCE — bold the kinds of words the winner bolded (numbers, place names, emotional triggers).
+  * Same CTA PATTERN — if the winner used a DM-keyword CTA, do the same.
+- AVOID the structural patterns of the underperformers (different format, different hook style, lower specificity).
+- If a DEEP-STUDY block is included above, treat the slide-by-slide text as your primary writing model. Match its sentence length, pacing, line breaks, and bolding rhythm — not its words. Different topic, same voice.
 - Specific numbers, not rounded. ($75,940 over "about $76K".)
 - 3rd-grade reading level throughout.
 - Bold 2-4 high-impact words per section using **double asterisks** (e.g. **$300K**, **outperforms**, **nobody talks about this**). Bold the nouns and numbers, not whole sentences.
@@ -197,7 +278,7 @@ export default function PromptBuilder({ selectedSlot }: PromptBuilderProps = {})
   const [ctaKeyword, setCtaKeyword] = useState<string>(DEFAULT_CTAS[0].keyword);
   const [ctaPromise, setCtaPromise] = useState<string>(DEFAULT_CTAS[0].promise);
   const [copied, setCopied] = useState(false);
-  const [posts, setPosts] = useState<CoachPost[]>([]);
+  const [loggedPosts, setLoggedPosts] = useState<LoggedPost[]>([]);
 
   // Reset topic + hook whenever the active slot changes — otherwise stale
   // selections from a previous slot's pillar carry over.
@@ -207,12 +288,15 @@ export default function PromptBuilder({ selectedSlot }: PromptBuilderProps = {})
   }, [activeDate, activeSlot, activeHook.id, dailyTopics]);
 
   // Pull the latest performance logs so the generated prompt is informed
-  // by what's actually working.
+  // by what's actually working — including the structural fingerprint
+  // of each winner (format, hook style, specificity, bolding, CTA
+  // pattern) plus the slide-by-slide text of the #1 winner as a deep-
+  // study writing model.
   useEffect(() => {
-    setPosts(loadPosts());
+    setLoggedPosts(loadLoggedPosts());
   }, []);
 
-  const learning = useMemo(() => pickLearningContext(posts), [posts]);
+  const learning = useMemo(() => pickLearningContext(loggedPosts), [loggedPosts]);
 
   const selectedHook =
     HOOK_FORMULAS.find((h) => h.id === hookId) ?? activeHook;
