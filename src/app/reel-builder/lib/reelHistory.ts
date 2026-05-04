@@ -18,6 +18,9 @@ export const REEL_HISTORY_LIMIT = 2;
 
 export interface SavedReelCard {
   bg: ReelBg;
+  // Custom hex codes when bg === "custom". Optional otherwise.
+  customBg?: string;
+  customAccent?: string;
   variation: ReelVariation;
 }
 

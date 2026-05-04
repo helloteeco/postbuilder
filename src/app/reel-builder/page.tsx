@@ -28,8 +28,11 @@ import ReelCaptionPreview from "./components/ReelCaptionPreview";
 import RecentReels from "./components/RecentReels";
 import ReelGuides from "./components/ReelGuides";
 import {
+  DEFAULT_CUSTOM_ACCENT,
+  DEFAULT_CUSTOM_BG,
   defaultBgForIndex,
   HOOK_ANGLE_LABELS,
+  paletteFor,
   REEL_BG_LABELS,
   REEL_BG_ORDER,
   REEL_BG_PALETTES,
@@ -70,6 +73,10 @@ type SendStatus = "idle" | "sent";
 
 interface CardState {
   bg: ReelBg;
+  // Hex codes when bg === "custom". Persisted so a user can switch
+  // away from custom and back without losing their picked colors.
+  customBg?: string;
+  customAccent?: string;
   variation: ReelVariation;
   exportStatus: ExportProgress | null;
   exportBusy: boolean;
@@ -106,7 +113,12 @@ export default function ReelBuilderPage() {
     const t = setTimeout(() => {
       updateCurrentReelHistory({
         source,
-        cards: cards.map((c) => ({ bg: c.bg, variation: c.variation })),
+        cards: cards.map((c) => ({
+          bg: c.bg,
+          customBg: c.customBg,
+          customAccent: c.customAccent,
+          variation: c.variation,
+        })),
       });
       setHistory(loadReelHistory());
     }, 1200);
@@ -120,6 +132,8 @@ export default function ReelBuilderPage() {
     setCards(
       entry.cards.map((c) => ({
         bg: c.bg,
+        customBg: c.customBg,
+        customAccent: c.customAccent,
         variation: c.variation,
         exportStatus: null,
         exportBusy: false,
@@ -149,7 +163,12 @@ export default function ReelBuilderPage() {
       // Save to history.
       const entry = pushReelHistory(
         source,
-        fresh.map((c) => ({ bg: c.bg, variation: c.variation })),
+        fresh.map((c) => ({
+          bg: c.bg,
+          customBg: c.customBg,
+          customAccent: c.customAccent,
+          variation: c.variation,
+        })),
       );
       setHistory(loadReelHistory());
       setActiveHistoryId(entry.id);
@@ -171,7 +190,36 @@ export default function ReelBuilderPage() {
   }
 
   function setCardBg(i: number, bg: ReelBg) {
-    setCards((prev) => prev.map((c, j) => (j === i ? { ...c, bg } : c)));
+    setCards((prev) =>
+      prev.map((c, j) => {
+        if (j !== i) return c;
+        // When switching INTO custom for the first time, seed the
+        // hex codes with the defaults so the color inputs have
+        // something to show. Preserves whatever the user already
+        // picked if they're toggling back.
+        if (bg === "custom" && !c.customBg) {
+          return {
+            ...c,
+            bg,
+            customBg: DEFAULT_CUSTOM_BG,
+            customAccent: c.customAccent ?? DEFAULT_CUSTOM_ACCENT,
+          };
+        }
+        return { ...c, bg };
+      }),
+    );
+  }
+
+  function setCardCustomBg(i: number, hex: string) {
+    setCards((prev) =>
+      prev.map((c, j) => (j === i ? { ...c, customBg: hex } : c)),
+    );
+  }
+
+  function setCardCustomAccent(i: number, hex: string) {
+    setCards((prev) =>
+      prev.map((c, j) => (j === i ? { ...c, customAccent: hex } : c)),
+    );
   }
 
   async function handleExport(cardIdx: number, format: "mp4" | "png") {
@@ -202,7 +250,12 @@ export default function ReelBuilderPage() {
   function handleSaveFavorite(cardIdx: number) {
     const c = cards[cardIdx];
     if (!c) return;
-    addFavorite({ variation: c.variation, bg: c.bg });
+    addFavorite({
+      variation: c.variation,
+      bg: c.bg,
+      customBg: c.customBg,
+      customAccent: c.customAccent,
+    });
     setFavorites(loadFavorites());
   }
 
@@ -317,6 +370,8 @@ export default function ReelBuilderPage() {
                   onSendToTracker={handleSendToTracker}
                   onPatchVariation={patchVariation}
                   onSetBg={setCardBg}
+                  onSetCustomBg={setCardCustomBg}
+                  onSetCustomAccent={setCardCustomAccent}
                 />
               ))}
             </div>
@@ -344,6 +399,8 @@ export default function ReelBuilderPage() {
           >
             <ReelHookPreview
               bg={c.bg}
+              customBg={c.customBg}
+              customAccent={c.customAccent}
               headline={c.variation.hookHeadline}
               subtitle={c.variation.hookSubtitle}
               profile={profile}
@@ -360,6 +417,8 @@ export default function ReelBuilderPage() {
           >
             <ReelHookPreview
               bg={f.bg}
+              customBg={f.customBg}
+              customAccent={f.customAccent}
               headline={f.variation.hookHeadline}
               subtitle={f.variation.hookSubtitle}
               profile={profile}
@@ -399,32 +458,90 @@ function filenameFor(
 
 interface BgPickerProps {
   value: ReelBg;
+  customBg?: string;
+  customAccent?: string;
   onChange: (next: ReelBg) => void;
+  onCustomBgChange: (hex: string) => void;
+  onCustomAccentChange: (hex: string) => void;
 }
 
-function BgPicker({ value, onChange }: BgPickerProps) {
+// Multi-color gradient used for the "custom" swatch when the user
+// hasn't picked a color yet — signals "any color you want."
+const CUSTOM_PREVIEW_GRADIENT =
+  "linear-gradient(135deg, #ec4899 0%, #f59e0b 33%, #10b981 66%, #3b82f6 100%)";
+
+function BgPicker({
+  value,
+  customBg,
+  customAccent,
+  onChange,
+  onCustomBgChange,
+  onCustomAccentChange,
+}: BgPickerProps) {
+  const customPalette = paletteFor("custom", customBg, customAccent);
   return (
-    <div className="flex flex-wrap gap-1">
-      {REEL_BG_ORDER.map((bg) => {
-        const palette = REEL_BG_PALETTES[bg];
-        const active = value === bg;
-        return (
-          <button
-            key={bg}
-            type="button"
-            onClick={() => onChange(bg)}
-            title={REEL_BG_LABELS[bg]}
-            aria-label={`Set background to ${REEL_BG_LABELS[bg]}`}
-            className={`h-7 w-7 rounded-full border-2 transition ${
-              active ? "border-gray-900 scale-110" : "border-gray-200 hover:border-gray-400"
-            }`}
-            style={{
-              background: palette.bg,
-              boxShadow: active ? "0 0 0 2px white inset" : undefined,
-            }}
-          />
-        );
-      })}
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1">
+        {REEL_BG_ORDER.map((bg) => {
+          const active = value === bg;
+          const isCustom = bg === "custom";
+          // For custom: show the user's picked bg if any, else a
+          // rainbow gradient as a "pick your own" affordance.
+          const swatchStyle: React.CSSProperties = isCustom
+            ? customBg
+              ? { background: customPalette.bg }
+              : { background: CUSTOM_PREVIEW_GRADIENT }
+            : { background: REEL_BG_PALETTES[bg].bg };
+          return (
+            <button
+              key={bg}
+              type="button"
+              onClick={() => onChange(bg)}
+              title={REEL_BG_LABELS[bg]}
+              aria-label={`Set background to ${REEL_BG_LABELS[bg]}`}
+              className={`h-7 w-7 rounded-full border-2 transition ${
+                active
+                  ? "border-gray-900 scale-110"
+                  : "border-gray-200 hover:border-gray-400"
+              }`}
+              style={{
+                ...swatchStyle,
+                boxShadow: active ? "0 0 0 2px white inset" : undefined,
+              }}
+            />
+          );
+        })}
+      </div>
+      {value === "custom" && (
+        <div className="flex flex-wrap items-center gap-3 rounded border border-gray-200 bg-gray-50 px-2 py-1.5">
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-700">
+            <span>BG</span>
+            <input
+              type="color"
+              value={customPalette.bg}
+              onChange={(e) => onCustomBgChange(e.target.value)}
+              className="h-6 w-8 cursor-pointer rounded border border-gray-300"
+              aria-label="Custom background color"
+            />
+            <code className="text-[10px] uppercase text-gray-500">
+              {customPalette.bg}
+            </code>
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] text-gray-700">
+            <span>Accent</span>
+            <input
+              type="color"
+              value={customPalette.accent}
+              onChange={(e) => onCustomAccentChange(e.target.value)}
+              className="h-6 w-8 cursor-pointer rounded border border-gray-300"
+              aria-label="Custom accent color"
+            />
+            <code className="text-[10px] uppercase text-gray-500">
+              {customPalette.accent}
+            </code>
+          </label>
+        </div>
+      )}
     </div>
   );
 }
@@ -438,6 +555,8 @@ interface VariationCardProps {
   onSendToTracker: (idx: number) => void;
   onPatchVariation: (idx: number, patch: Partial<ReelVariation>) => void;
   onSetBg: (idx: number, bg: ReelBg) => void;
+  onSetCustomBg: (idx: number, hex: string) => void;
+  onSetCustomAccent: (idx: number, hex: string) => void;
 }
 
 function VariationCard({
@@ -449,6 +568,8 @@ function VariationCard({
   onSendToTracker,
   onPatchVariation,
   onSetBg,
+  onSetCustomBg,
+  onSetCustomAccent,
 }: VariationCardProps) {
   const previewHeight = useMemo(() => REEL_HEIGHT * PREVIEW_SCALE, []);
   return (
@@ -464,6 +585,8 @@ function VariationCard({
       >
         <ReelHookPreview
           bg={card.bg}
+          customBg={card.customBg}
+          customAccent={card.customAccent}
           headline={card.variation.hookHeadline}
           subtitle={card.variation.hookSubtitle}
           profile={profile}
@@ -486,7 +609,14 @@ function VariationCard({
         </button>
       </div>
 
-      <BgPicker value={card.bg} onChange={(bg) => onSetBg(index, bg)} />
+      <BgPicker
+        value={card.bg}
+        customBg={card.customBg}
+        customAccent={card.customAccent}
+        onChange={(bg) => onSetBg(index, bg)}
+        onCustomBgChange={(hex) => onSetCustomBg(index, hex)}
+        onCustomAccentChange={(hex) => onSetCustomAccent(index, hex)}
+      />
 
       <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
         Headline
@@ -608,6 +738,8 @@ function FavoritesStrip({
               >
                 <ReelHookPreview
                   bg={f.bg}
+                  customBg={f.customBg}
+                  customAccent={f.customAccent}
                   headline={f.variation.hookHeadline}
                   subtitle={f.variation.hookSubtitle}
                   profile={profile}

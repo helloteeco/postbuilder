@@ -74,8 +74,11 @@ export const COVER_HOOK_MAX_HEIGHT = 510;
 export const SEE_DESC_TEXT_Y = 1310;
 
 // ── Background palettes ────────────────────────────────────────────
-// Mirror Post Builder's full 7-palette set so the reel's bg picker
-// has 1:1 parity with the carousel's.
+// Mirror Post Builder's full 7-palette set + custom so the reel's bg
+// picker has 1:1 parity with the carousel's. "custom" lets the user
+// pick any bg + accent hex; foreground / muted are derived from the
+// bg's relative luminance (light bg → dark text, dark bg → light
+// text), same logic Post Builder uses.
 export type ReelBg =
   | "white"
   | "soft"
@@ -83,7 +86,8 @@ export type ReelBg =
   | "dark"
   | "cream"
   | "forest"
-  | "navy";
+  | "navy"
+  | "custom";
 
 export interface ReelBgPalette {
   bg: string;
@@ -92,7 +96,9 @@ export interface ReelBgPalette {
   accent: string;
 }
 
-export const REEL_BG_PALETTES: Record<ReelBg, ReelBgPalette> = {
+// Preset palettes only — "custom" is computed at render time via
+// customPaletteFor() so it's not in this map.
+export const REEL_BG_PALETTES: Record<Exclude<ReelBg, "custom">, ReelBgPalette> = {
   white: { bg: "#FFFFFF", fg: "#0F1419", muted: "#6B7280", accent: "#2E86AB" },
   soft: { bg: "#EEF2F6", fg: "#0F1419", muted: "#6B7280", accent: "#3290B5" },
   yellow: { bg: "#F5B935", fg: "#0F1419", muted: "#5C4A1F", accent: "#0F1419" },
@@ -110,6 +116,7 @@ export const REEL_BG_LABELS: Record<ReelBg, string> = {
   cream: "Cream",
   forest: "Forest",
   navy: "Navy",
+  custom: "Custom",
 };
 
 export const REEL_BG_ORDER: ReelBg[] = [
@@ -120,7 +127,64 @@ export const REEL_BG_ORDER: ReelBg[] = [
   "soft",
   "yellow",
   "cream",
+  "custom",
 ];
+
+// Default hex codes when a card switches to "custom" but the user
+// hasn't picked colors yet. Match the dark palette so there's no
+// visual flash.
+export const DEFAULT_CUSTOM_BG = "#0F1419";
+export const DEFAULT_CUSTOM_ACCENT = "#5FB4D2";
+
+// WCAG relative luminance — used to auto-pick foreground / muted
+// colors so a custom bg always reads cleanly. Same formula Post
+// Builder uses for its custom cover bg.
+function relativeLuminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 1;
+  const v = m[1];
+  const r = parseInt(v.slice(0, 2), 16) / 255;
+  const g = parseInt(v.slice(2, 4), 16) / 255;
+  const b = parseInt(v.slice(4, 6), 16) / 255;
+  const f = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+function normHex(hex: string | undefined, fallback: string): string {
+  if (!hex || !/^#?[0-9a-f]{6}$/i.test(hex.trim())) return fallback;
+  const trimmed = hex.trim();
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+}
+
+function customPaletteFor(
+  customBg: string | undefined,
+  customAccent: string | undefined,
+): ReelBgPalette {
+  const bg = normHex(customBg, DEFAULT_CUSTOM_BG);
+  const isLightBg = relativeLuminance(bg) > 0.5;
+  return {
+    bg,
+    fg: isLightBg ? "#0F1419" : "#FFFFFF",
+    muted: isLightBg ? "#6B7280" : "#9CA3AF",
+    accent: normHex(
+      customAccent,
+      isLightBg ? "#2E86AB" : DEFAULT_CUSTOM_ACCENT,
+    ),
+  };
+}
+
+// Resolve any ReelBg (including "custom") into a concrete palette.
+// All renderers go through this helper so a single change point
+// determines how each bg is interpreted.
+export function paletteFor(
+  bg: ReelBg,
+  customBg?: string,
+  customAccent?: string,
+): ReelBgPalette {
+  if (bg === "custom") return customPaletteFor(customBg, customAccent);
+  return REEL_BG_PALETTES[bg];
+}
 
 export type ReelHookAngle =
   | "counter-intuitive"

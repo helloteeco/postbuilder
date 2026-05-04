@@ -43,7 +43,7 @@ import {
   COVER_PADDING_BOTTOM,
   COVER_PADDING_TOP,
   COVER_PADDING_X,
-  REEL_BG_PALETTES,
+  paletteFor,
   REEL_HEIGHT,
   REEL_WIDTH,
   SEE_DESC_TEXT_Y,
@@ -53,6 +53,9 @@ import type { PostBuilderProfile, ProfileFont } from "@/lib/post-templates";
 
 interface Props {
   bg: ReelBg;
+  // Hex codes used when bg === "custom". Ignored otherwise.
+  customBg?: string;
+  customAccent?: string;
   headline: string;
   subtitle?: string;
   profile: PostBuilderProfile;
@@ -177,10 +180,10 @@ function ProfileRowCompact({
 }
 
 const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPreview(
-  { bg, headline, subtitle, profile, scale },
+  { bg, customBg, customAccent, headline, subtitle, profile, scale },
   ref,
 ) {
-  const palette = REEL_BG_PALETTES[bg];
+  const palette = paletteFor(bg, customBg, customAccent);
   const fontFamily = fontFamilyFor(profile);
   const transform = scale ? `scale(${scale})` : undefined;
 
