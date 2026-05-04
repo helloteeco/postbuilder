@@ -207,10 +207,21 @@ function emptyNewDraft(pillars: Pillar[]): NewPostDraft {
 }
 
 function snapshotsBadgeForPost(post: LoggedPost): string {
+  // The display badge is intentionally looser than the strict detection
+  // window in timingHelpers.ts. Two reasons:
+  //   1. The old has48 ([36, 72]) + has7d ([168, ∞)) windows left a dead
+  //      zone at 3-6 days (72-168h) where a snapshot got NEITHER badge
+  //      and the code fell through to "preliminary" — wildly wrong for
+  //      a post that's 5 days old.
+  //   2. hoursAfterPosting is stored as Math.round(hours), so a "posted
+  //      exactly 7 days ago" entry can land at 167h and miss the strict
+  //      168h boundary.
+  // The strict windows used by getDetectionSnapshot / outlier detection
+  // are unchanged — this is just visual labeling.
+  const has7d = post.snapshots.some((s) => s.hoursAfterPosting >= 6.5 * 24);
   const has48 = post.snapshots.some(
-    (s) => s.hoursAfterPosting >= 36 && s.hoursAfterPosting <= 72,
+    (s) => s.hoursAfterPosting >= 36 && s.hoursAfterPosting < 6.5 * 24,
   );
-  const has7d = post.snapshots.some((s) => s.hoursAfterPosting >= 7 * 24);
   const parts: string[] = [];
   if (post.snapshots.length === 0) parts.push("pending");
   else if (post.snapshots.length === 1 && !has48 && !has7d) parts.push("preliminary");
