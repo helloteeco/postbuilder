@@ -1,18 +1,22 @@
-// Builds a copy-paste-ready prompt for Claude.ai that asks it to remix
-// a top-performing post. The point isn't to redesign the post — it's
+// Builds a copy-paste-ready prompt for Claude.ai that remixes a
+// top-performing post. The point isn't to redesign the post — it's
 // the opposite: keep the body slides + CTA almost verbatim (we know
-// they worked) and produce 5 alternate COVER HOOKS the user can space
-// out and republish over the next 60-90 days without their audience
-// feeling like they're seeing the same post twice.
+// they worked) and swap in a fresh cover hook so the user can repost
+// 60-90 days later without their audience recognizing the duplicate.
+//
+// Output is a single ready-to-use post, NOT a menu of options. Claude
+// is instructed to brainstorm 5 candidates internally, evaluate them
+// against scroll-stopping criteria, and output ONLY the winner —
+// formatted slide-by-slide so the user can paste it straight into
+// the Post Builder's "Paste text" mode.
 //
 // Strategy:
 //   - Body slides 2..N-1 are sacred. Same numbers, same named entities,
 //     same examples, same structure per slide. At most a 1-2 word tweak
 //     per bullet for freshness.
-//   - The cover (slide 1) is where Claude varies things. 5 distinct
-//     hook angles, each with a different hook style (question /
-//     contrarian / list-promise / specific-number / news-driven) so the
-//     user has real options to pick from.
+//   - The cover (slide 1) is where Claude varies things. Internal
+//     brainstorm across 5 hook styles, then pick the strongest single
+//     headline + subtitle.
 //   - CTA is locked verbatim. That part converted; don't break it.
 //
 // We feed Claude:
@@ -78,16 +82,25 @@ export function buildRemixPrompt(post: LoggedPost): string {
   const lines: string[] = [];
 
   lines.push(
-    "You are remixing one of my high-performing Instagram carousels. The original post outperformed my baseline — the structure, framing, and content choices clearly resonated with my audience. I want to be able to repost this material 60-90 days from now without my audience feeling like I'm repeating myself.",
+    "You are remixing one of my high-performing Instagram carousels. The original post outperformed my baseline — the structure, framing, and content choices clearly resonated with my audience. I want to repost this material 60-90 days from now without my audience recognizing it as a duplicate.",
     "",
-    "Your job: produce 5 alternate COVER HOOKS for this exact post. The body slides and CTA stay nearly identical because they're what made it work — only the cover (slide 1) gets meaningful variation.",
+    "Your job: produce ONE ready-to-publish remix. Same body slides, same CTA, fresh cover hook. I do NOT want a menu of options — I want the single best version, ready to paste straight into my slide builder.",
     "",
-    "RULES — read carefully:",
-    "1. The cover (slide 1) is where you remix. Generate 5 distinct cover variations. Each must promise the same outcome but use a different angle and wording. Vary the hook style across the 5 — at minimum cover: question, contrarian / nobody-talks-about-this, list-promise, specific-number, news-driven peg.",
-    "2. Body slides (slides 2 through N-1) stay nearly identical. Same number of slides. Same structure per slide. Same numbers, same dollar amounts, same percentages, same named cities/people/brands. You may tweak ONE bullet per body slide for freshness — swap a verb, reorder a clause — but don't add or remove information.",
-    "3. The CTA (final slide) is LOCKED. Reproduce it verbatim. Do not rephrase. That part converted; don't touch it.",
-    "4. Preserve the post's voice and bolding cadence. Wrap roughly the same number of words in **double asterisks** per slide as the original. Bold the same nouns and numbers — those are the eye-stoppers.",
-    "5. Do NOT introduce new claims, new numbers, or new examples that weren't in the original. This is a remix, not a fresh post.",
+    "PROCESS — do this internally before writing the final output:",
+    "1. Brainstorm 5 cover-hook candidates spanning different angles: question, contrarian / nobody-talks-about-this, list-promise, specific-number, news-driven peg. Don't show me these.",
+    "2. Score each candidate against:",
+    "   a. Stops the scroll on a cold feed (curiosity / pattern interrupt)",
+    "   b. Promises the SAME outcome as the original (don't drift the substance)",
+    "   c. Reads natural — not clickbait, not corporate, in my voice",
+    "   d. Far enough from the original wording that a returning viewer won't recognize it",
+    "3. Pick the single highest-scoring candidate. Output only that one.",
+    "",
+    "RULES for the final output:",
+    "1. Cover (slide 1): the chosen winner — fresh headline + optional subtitle. Headline ≤ 7 words, ≤ 40 characters, no individual word over 12 chars. Subtitle ≤ 60 chars, optional.",
+    "2. Body slides (slides 2 through N-1): keep nearly identical to the original. Same number of slides. Same structure per slide. Same numbers, same dollar amounts, same percentages, same named cities/people/brands. You may tweak ONE bullet per slide for freshness (swap a verb, reorder a clause) but don't add or remove information.",
+    "3. CTA (final slide): LOCKED. Reproduce verbatim. Do not rephrase. That part converted.",
+    "4. Preserve the post's voice and bolding cadence. Wrap roughly the same number of words in **double asterisks** per slide as the original. Bold the same nouns and numbers.",
+    "5. Do NOT introduce new claims, new numbers, or new examples. This is a remix, not a fresh post.",
     "",
     "WHY THIS POST IS WORTH REMIXING:",
   );
@@ -152,26 +165,22 @@ export function buildRemixPrompt(post: LoggedPost): string {
     lines.push("");
   }
 
-  lines.push("OUTPUT FORMAT:");
+  lines.push("OUTPUT FORMAT — single post, ready to paste into my slide builder:");
   lines.push("");
-  lines.push("First, produce the 5 cover variations, each labeled and numbered:");
+  lines.push("Use this exact shape, no commentary, no preface, no \"here is the remix\", no markdown headers — just the slides:");
   lines.push("");
-  lines.push("VARIATION 1 — [hook style label]");
-  lines.push("HEADLINE: <max 7 words, ≤40 characters, no individual word longer than 12 chars>");
-  lines.push("SUBTITLE: <optional, ≤60 characters, one line>");
-  lines.push("ANGLE NOTE: <one sentence explaining what's different about this angle>");
+  lines.push("Slide 1: <fresh cover headline>");
+  lines.push("<optional one-line subtitle>");
   lines.push("");
-  lines.push("(repeat for VARIATION 2 through VARIATION 5)");
+  lines.push("Slide 2: <body slide 2 text, **bolding** preserved>");
   lines.push("");
-  lines.push("Then produce the shared body section (same across all 5 variations):");
+  lines.push("Slide 3: <body slide 3 text>");
   lines.push("");
-  lines.push("─── BODY SLIDES (unchanged across all variations) ───");
-  lines.push("Slide 2: <body text, with **bolding** preserved>");
-  lines.push("Slide 3: <body text>");
-  lines.push("...");
-  lines.push("Slide N: <CTA verbatim from original>");
+  lines.push("(continue through every slide in order)");
   lines.push("");
-  lines.push("Use **double asterisks** for bolding, same as the original. Do not output prose explanation outside the labeled blocks above.");
+  lines.push(`Slide ${slides.length || "N"}: <CTA verbatim from original>`);
+  lines.push("");
+  lines.push("Use **double asterisks** for bolding, same as the original. Do not show your 5 brainstormed candidates. Do not include angle notes, scoring, or explanation. Output the slides only — first character should be \"Slide 1:\".");
 
   return lines.join("\n");
 }

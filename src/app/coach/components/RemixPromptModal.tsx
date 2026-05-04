@@ -67,9 +67,10 @@ export default function RemixPromptModal({ open, post, onClose }: Props) {
               {post.title}
             </h2>
             <p className="mt-1 text-xs text-gray-600">
-              5 cover-hook variations of this exact post — body slides + CTA stay
-              nearly identical so you can space these out and republish over the
-              next 60-90 days.
+              Claude brainstorms 5 cover-hook angles internally, picks the
+              strongest one, and returns a single ready-to-publish post. Body
+              slides + CTA stay nearly identical — just paste straight into the
+              Post Builder.
             </p>
           </div>
           <button
@@ -100,8 +101,8 @@ export default function RemixPromptModal({ open, post, onClose }: Props) {
               and send.
             </li>
             <li>
-              Pick the cover variation you like best, then drop the full thing
-              back into the Post Builder (Paste text mode) to render slides.
+              Copy Claude&apos;s response and paste it straight into the Post
+              Builder (Paste text mode) to render slides.
             </li>
           </ol>
 
