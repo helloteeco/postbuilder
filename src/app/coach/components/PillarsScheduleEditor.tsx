@@ -349,6 +349,22 @@ export default function PillarsScheduleEditor({ open, onClose, onSaved }: Props)
                 className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
               />
             </label>
+            <label className="text-xs text-gray-600 md:col-span-2">
+              Creator identity
+              <input
+                type="text"
+                value={settings.creatorIdentity}
+                onChange={(e) =>
+                  patchSettings({ creatorIdentity: e.target.value })
+                }
+                placeholder="e.g. a real estate investor who teaches W2 earners how to build cash flow"
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              />
+              <span className="mt-1 block text-[10px] text-gray-500">
+                Used as the first line of your generated Claude.ai prompt:
+                &ldquo;You are a ghostwriter for [this].&rdquo;
+              </span>
+            </label>
           </div>
         </div>
 

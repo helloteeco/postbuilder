@@ -466,20 +466,27 @@ export function getNextDays(start: Date, count = 7): DayPlan[] {
 }
 
 // Settings the user copies into the Post Builder when they go to write.
-// Editable per user via the customization editor — defaults match the
-// Dr. Jeff seed.
+// Editable per user via the customization editor. Defaults are generic
+// placeholders so a fresh visitor sees prompts to fill in, not a
+// previous user's niche framing baked into the system prompt.
 export interface CoachSettings {
   slideCount: number;
   readingLevel: string;
   audience: string;
   tone: string;
+  // The first line of the generated Claude.ai prompt:
+  //   "You are a ghostwriter for ${creatorIdentity}."
+  // Generic default → user customizes via the pillars/schedule editor.
+  creatorIdentity: string;
 }
 
 export const DEFAULT_COACH_SETTINGS: CoachSettings = {
   slideCount: 10,
   readingLevel: "3rd grade",
-  audience: "high income earners with $65k saved",
+  audience: "your target audience (e.g. W2 professionals saving for their first investment)",
   tone: "confident, direct, no-fluff",
+  creatorIdentity:
+    "a creator in your niche teaching your audience your core idea (edit this in Customize → Settings)",
 };
 
 let effectiveSettingsRef: CoachSettings = DEFAULT_COACH_SETTINGS;

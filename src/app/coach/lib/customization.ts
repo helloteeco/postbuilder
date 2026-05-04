@@ -155,7 +155,15 @@ export function loadCustomSettings(): CoachSettings | null {
     ) {
       return null;
     }
-    return parsed as CoachSettings;
+    // Backfill creatorIdentity for older saves that pre-date the field.
+    // Falls back to the default placeholder so the prompt doesn't end
+    // up reading "You are a ghostwriter for ." if a stale settings row
+    // is loaded.
+    const creatorIdentity =
+      typeof parsed.creatorIdentity === "string" && parsed.creatorIdentity.trim()
+        ? parsed.creatorIdentity
+        : DEFAULT_COACH_SETTINGS.creatorIdentity;
+    return { ...parsed, creatorIdentity } as CoachSettings;
   } catch {
     return null;
   }

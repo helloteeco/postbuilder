@@ -27,6 +27,7 @@ import ReelHookPreview from "./components/ReelHookPreview";
 import ReelCaptionPreview from "./components/ReelCaptionPreview";
 import RecentReels from "./components/RecentReels";
 import ReelGuides from "./components/ReelGuides";
+import WelcomeBanner from "@/components/WelcomeBanner";
 import {
   DEFAULT_CUSTOM_ACCENT,
   DEFAULT_CUSTOM_BG,
@@ -326,6 +327,33 @@ export default function ReelBuilderPage() {
           </button>
         </div>
       </header>
+
+      <WelcomeBanner
+        storageKey="welcome_reel_builder_v1"
+        title="👋 Welcome to Reel Builder"
+        steps={[
+          {
+            label: "Set your profile (left panel)",
+            detail:
+              "Same profile as Post Builder — avatar, display name, handle, verified check, font. Edits here propagate to Post Builder covers too. Replace the 'Your Name' placeholder before you generate so reels carry your real identity.",
+          },
+          {
+            label: "Paste your 10-section ghostwriter output",
+            detail:
+              "Same input you'd feed Post Builder. Click Generate 3 Reels — Claude returns 3 hook variations + matching long-form captions, each tuned to a different angle.",
+          },
+          {
+            label: "Edit + customize each variation",
+            detail:
+              "Headline, subtitle, caption, background (7 palettes + custom hex), and accent color are all editable per card. Wrap words in **double asterisks** to highlight them in the accent color on the cover.",
+          },
+          {
+            label: "Download + send to tracker",
+            detail:
+              "Each card has Download MP4 (7-second 1080×1920 static loop with silent audio) and a PNG fallback. Send-to-tracker queues the reel in Coach Mode like a Post Builder carousel.",
+          },
+        ]}
+      />
 
       <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
         <aside className="space-y-4">

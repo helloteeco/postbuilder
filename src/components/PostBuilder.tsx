@@ -31,6 +31,7 @@ import SlidePreviewGrid from "@/components/post-builder/SlidePreviewGrid";
 import CaptionPanel from "@/components/post-builder/CaptionPanel";
 import ExportBar from "@/components/post-builder/ExportBar";
 import SendToTrackerButton from "@/components/post-builder/SendToTrackerButton";
+import WelcomeBanner from "@/components/WelcomeBanner";
 
 interface AnalyzeOk {
   ok: true;
@@ -574,6 +575,35 @@ export default function PostBuilder() {
           </div>
         </div>
       )}
+
+      <div className="mb-4">
+        <WelcomeBanner
+          storageKey="welcome_post_builder_v1"
+          title="👋 Welcome to Post Builder"
+          steps={[
+            {
+              label: "Set your profile",
+              detail:
+                "Open the Profile panel on the left, type your display name + handle, upload your avatar, and toggle the verified check if you have one. This is what every cover slide will use — replace the 'Your Name' placeholder before you generate.",
+            },
+            {
+              label: "Tune your carousel params",
+              detail:
+                "Just below the profile, set your audience (e.g. 'first-time investors saving for a down payment') and reading level. These get passed to Claude so the post is written for the right reader.",
+            },
+            {
+              label: "Generate",
+              detail:
+                "Pick an input mode (Screenshots / Paste text / Instagram URL / My own text), click Generate carousel. Edit any slide live, then download as MP4-ready PNGs or zip.",
+            },
+            {
+              label: "Send to tracker (optional)",
+              detail:
+                'After you finalize a carousel, click "Send to tracker" to queue it in Coach Mode\'s Performance Tracker. You\'ll add the time posted + metrics later, after it\'s live.',
+            },
+          ]}
+        />
+      </div>
 
       {error && (
         <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">

@@ -15,6 +15,7 @@ import PromptBuilder from "@/app/coach/components/PromptBuilder";
 import StoryBank from "@/app/coach/components/StoryBank";
 import TodaysPlan from "@/app/coach/components/TodaysPlan";
 import WeekCalendar from "@/app/coach/components/WeekCalendar";
+import WelcomeBanner from "@/components/WelcomeBanner";
 import type { Slot } from "@/app/coach/lib/strategy";
 import { installCustomData } from "@/app/coach/lib/customization";
 import {
@@ -254,6 +255,33 @@ export default function CoachDashboard() {
           </button>
         </div>
       </div>
+
+      <WelcomeBanner
+        storageKey="welcome_coach_v1"
+        title="👋 Welcome to Coach Mode"
+        steps={[
+          {
+            label: "Make it yours",
+            detail:
+              'Click "Customize pillars & schedule" above. Update your audience, tone, and creator identity (the line that says "You are a ghostwriter for…" in your generated prompts) so every post sounds like you, not like the demo.',
+          },
+          {
+            label: "Adjust pillars + schedule",
+            detail:
+              "The 5 default pillars are starter examples. In the same Customize panel, edit pillar names / topics or replace them with your own niche, then arrange the weekly AM/PM rotation.",
+          },
+          {
+            label: "Generate your first prompt",
+            detail:
+              "Click any slot in the 7-day calendar below. Pick a topic, copy the prompt, and paste it into Claude.ai. Bring the response back into Post Builder or Reel Builder to render slides / reels.",
+          },
+          {
+            label: "(Optional) Drop in personal stories",
+            detail:
+              "The Story Bank lets you save anecdotes from your Claude.ai chats so future prompts pull real names + numbers + moments instead of generic filler. Has a built-in extraction prompt to grab them all from a long conversation.",
+          },
+        ]}
+      />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
         <div className="mb-1 font-semibold uppercase tracking-wider text-amber-800">

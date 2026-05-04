@@ -185,7 +185,8 @@ function buildPrompt({
   stories: Story[];
   todayDate: Date;
 }): string {
-  const { audience, tone, readingLevel } = LOCKED_POST_BUILDER_SETTINGS;
+  const { audience, tone, readingLevel, creatorIdentity } =
+    LOCKED_POST_BUILDER_SETTINGS;
 
   // Build the past-performance section. If there's no data, say so honestly
   // instead of inventing context — Claude will perform better without
@@ -212,7 +213,7 @@ ${loserLines}
 Targets to beat: save rate ≥${SAVE_RATE_TARGET}%, share rate ≥${SHARE_RATE_TARGET}%.${deepStudy}`;
   }
 
-  return `You are a ghostwriter for a real estate investor who teaches W2 high earners how to use rural Airbnbs to build wealth and replace W2 income.
+  return `You are a ghostwriter for ${creatorIdentity}.
 
 Write a 10-section long-form Instagram carousel post on this topic.
 

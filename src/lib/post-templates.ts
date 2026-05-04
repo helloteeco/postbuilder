@@ -130,18 +130,23 @@ export interface PostBuilderParams {
 export const DEFAULT_PARAMS: PostBuilderParams = {
   slideCount: 10,
   readingLevel: "3rd grade",
-  audience: "high income earners with $65k saved",
+  // Generic placeholder so new users see a hint, not a previous user's
+  // niche. Edit in the Carousel params panel.
+  audience: "your target audience (edit me in Carousel params)",
   tone: "confident, direct, no-fluff",
   maxCharsBody: 220,
   maxBullets: 5,
   maxCharsBullet: 42,
 };
 
+// Generic defaults so a fresh visitor sees placeholder identity, not
+// someone else's name + handle on the cover slide. ProfileEditor
+// prompts the user to fill it in before first export.
 export const DEFAULT_PROFILE: PostBuilderProfile = {
-  displayName: "Dr.Jeff Chheuy",
-  handle: "@jeffchheuy",
+  displayName: "Your Name",
+  handle: "@yourhandle",
   avatarDataUrl: null,
-  verified: true,
+  verified: false,
   font: "sans",
 };
 
