@@ -1,54 +1,58 @@
-// Visual constants + shared types for the Reel Builder. Mirrors the
-// look of the Post Builder's cover slide (dark background, centered
-// hook, profile row) but at 9:16 portrait (1080×1920) for Instagram
-// Reels instead of 4:5 (1080×1350).
+// Visual constants + shared types for the Reel Builder. The cover is
+// laid out as a 1080×1920 frame split into two zones:
 //
-// We deliberately do NOT import from the Post Builder template — per
-// spec, Reel Builder is a separate feature. Visual parity is achieved
-// by mirroring the same color palette and font treatment, not by
-// sharing files.
+//   ┌─────────────────────────┐  y=0
+//   │   "See description ↓"   │
+//   │      ↓ chevron          │  570px tall — top zone
+//   ├─────────────────────────┤  y=570
+//   │  Headline (132pt bold)  │
+//   │  Subtitle (48pt muted)  │
+//   │   ...                   │  1350px tall — Post Builder cover
+//   │  [avatar]  Name ✓       │  layout, pixel-identical
+//   │            @handle      │
+//   └─────────────────────────┘  y=1920
+//
+// The bottom 1350px duplicates Post Builder's slide-1 cover EXACTLY
+// (same padding, same font sizes, same compact profile row at the
+// bottom) so when the user posts the rendered MP4 / PNG to Instagram,
+// their headline / subtitle / name / handle land in the same visual
+// pixels they're used to seeing in a feed post.
+//
+// Per the original spec, Reel Builder duplicates this layout rather
+// than importing from Post Builder's CarouselSlide — keeps the two
+// features decoupled.
 
 // 9:16 portrait, the IG Reel cover spec.
 export const REEL_WIDTH = 1080;
 export const REEL_HEIGHT = 1920;
 
-// Two reel background palettes — navy and forest. Each variation can
-// optionally override its bg, but by default we cycle navy→forest→navy
-// across the 3 variations so the user has visual differentiation even
-// when the headlines are similar in tone.
-export type ReelBg = "navy" | "forest";
+// The bottom region is a 1080×1350 mirror of the Post Builder cover.
+// The top region holds the "See description ↓" CTA. These constants
+// are the Post Builder cover's known-good padding values — mirrored
+// so the reel and the carousel cover are pixel-aligned.
+export const REEL_COVER_HEIGHT = 1350;
+export const REEL_TOP_ZONE_HEIGHT = REEL_HEIGHT - REEL_COVER_HEIGHT; // 570
+export const COVER_PADDING_TOP = 240;
+export const COVER_PADDING_BOTTOM = 380;
+export const COVER_PADDING_X = 80;
+
+// Reel palettes mirror the Post Builder cover palettes (dark, navy,
+// forest) so a reel and a carousel cover with the same bg key look
+// identical. Default is "dark" because the user's reference screenshot
+// uses the dark palette.
+export type ReelBg = "dark" | "navy" | "forest";
 
 export interface ReelBgPalette {
-  // CSS color for the page background.
   bg: string;
-  // Default text color.
-  text: string;
-  // Muted subtitle / handle color.
+  fg: string;
   muted: string;
-  // Accent color for **bolded** spans inside the hook (Instagram
-  // doesn't render markdown, but we DO render the bold visually on
-  // the cover image so the user can lean on the same emphasis cue
-  // they use in Post Builder).
   accent: string;
-  // Verified-check ring background.
-  checkBg: string;
 }
 
 export const REEL_BG_PALETTES: Record<ReelBg, ReelBgPalette> = {
-  navy: {
-    bg: "#0A1628",
-    text: "#FFFFFF",
-    muted: "#9DB2C7",
-    accent: "#5DADE2",
-    checkBg: "#1D4ED8",
-  },
-  forest: {
-    bg: "#0A2818",
-    text: "#FFFFFF",
-    muted: "#A6C2A6",
-    accent: "#E8B042",
-    checkBg: "#1D4ED8",
-  },
+  dark: { bg: "#0F1419", fg: "#FFFFFF", muted: "#9CA3AF", accent: "#5FB4D2" },
+  navy: { bg: "#0F2645", fg: "#F8FAFC", muted: "#94A8C7", accent: "#FF8C5C" },
+  forest: { bg: "#1B3A2F", fg: "#F5F0E1", muted: "#9DBAA9", accent: "#E8B042" },
 };
 
 // One of the 5 hook angles the API picks from. Surfaced as a label
@@ -94,10 +98,12 @@ export const HEADLINE_MAX_WORDS = 7;
 export const HEADLINE_MAX_WORD_CHARS = 12;
 export const SUBTITLE_MAX_CHARS = 60;
 
-// Pick a default bg for a variation index so each card looks visually
-// distinct even when the API didn't override.
+// Pick a default bg for a variation index. Default to "dark" (matches
+// the reference screenshot), then cycle navy → forest so the 3 cards
+// look visually distinct without the user having to override.
 export function defaultBgForIndex(i: number): ReelBg {
-  return i % 2 === 0 ? "navy" : "forest";
+  const order: ReelBg[] = ["dark", "navy", "forest"];
+  return order[i % order.length];
 }
 
 // Truncate a caption at the last full sentence before the hard cap.
@@ -106,7 +112,6 @@ export function defaultBgForIndex(i: number): ReelBg {
 export function truncateAtSentence(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   const slice = text.slice(0, maxChars);
-  // Look for the last sentence terminator in the truncated chunk.
   const candidates = [".", "!", "?", "\n\n"];
   let cutAt = -1;
   for (const t of candidates) {
