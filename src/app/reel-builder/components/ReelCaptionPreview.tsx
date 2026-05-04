@@ -1,8 +1,9 @@
 "use client";
 
 // Caption block under each reel preview. Collapsible (collapsed shows
-// the first 100 chars + "…"), with a character counter color-coded
-// against the IG hard cap and a Copy button.
+// the first 100 chars + "…"). Expanded reveals an EDITABLE textarea
+// so the user can tweak the generated caption inline before copying.
+// Live char-counter color-codes against the IG hard cap.
 
 import { useState } from "react";
 import {
@@ -12,6 +13,7 @@ import {
 
 interface Props {
   caption: string;
+  onChange: (next: string) => void;
 }
 
 function counterColor(count: number): string {
@@ -20,7 +22,7 @@ function counterColor(count: number): string {
   return "text-emerald-700 bg-emerald-50";
 }
 
-export default function ReelCaptionPreview({ caption }: Props) {
+export default function ReelCaptionPreview({ caption, onChange }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const count = caption.length;
@@ -33,7 +35,7 @@ export default function ReelCaptionPreview({ caption }: Props) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // ignore — the caption is visible, user can manual-copy
+      // ignore — caption is visible, user can manual-copy
     }
   }
 
@@ -69,9 +71,10 @@ export default function ReelCaptionPreview({ caption }: Props) {
       </div>
       {expanded ? (
         <textarea
-          readOnly
           value={caption}
-          className="h-64 w-full resize-none rounded border border-gray-200 bg-white p-2 font-mono text-xs text-gray-800"
+          onChange={(e) => onChange(e.target.value)}
+          className="h-64 w-full resize-y rounded border border-gray-300 bg-white p-2 font-mono text-xs text-gray-800"
+          placeholder="Your caption — editable. Asterisks like **word** stay literal in the caption (Instagram doesn't render them); use them only on the cover headline / subtitle if you want bold highlights there."
         />
       ) : (
         <div className="text-xs leading-relaxed text-gray-600">{preview}</div>

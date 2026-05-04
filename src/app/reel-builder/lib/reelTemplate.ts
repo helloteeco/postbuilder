@@ -1,46 +1,56 @@
-// Visual constants + shared types for the Reel Builder. The cover is
-// laid out as a 1080×1920 frame split into two zones:
+// Visual constants + shared types for the Reel Builder. Layout uses
+// ABSOLUTE positioning for each major block so headlines, subtitles,
+// and the profile row land in fixed pixel positions regardless of
+// content length — no flex drift.
 //
-//   ┌─────────────────────────┐  y=0
-//   │   "See description ↓"   │
-//   │      ↓ chevron          │  570px tall — top zone
-//   ├─────────────────────────┤  y=570
-//   │  Headline (132pt bold)  │
-//   │  Subtitle (48pt muted)  │
-//   │   ...                   │  1350px tall — Post Builder cover
-//   │  [avatar]  Name ✓       │  layout, pixel-identical
-//   │            @handle      │
-//   └─────────────────────────┘  y=1920
+// The y-coordinates are tuned so that when the rendered MP4 / PNG is
+// posted to Instagram Reels:
+//   • Headline starts at ~20% from the top (matches the visual feel
+//     of a Post Builder cover post in the IG feed).
+//   • Profile row sits comfortably above the IG bottom-UI overlay
+//     zone (which covers ~30% of the screen with caption / like /
+//     comment / share buttons).
+//   • "See description ↓" sits in the top safe zone above the
+//     headline, tight to its chevron (no oceanic gap).
 //
-// The bottom 1350px duplicates Post Builder's slide-1 cover EXACTLY
-// (same padding, same font sizes, same compact profile row at the
-// bottom) so when the user posts the rendered MP4 / PNG to Instagram,
-// their headline / subtitle / name / handle land in the same visual
-// pixels they're used to seeing in a feed post.
-//
-// Per the original spec, Reel Builder duplicates this layout rather
-// than importing from Post Builder's CarouselSlide — keeps the two
-// features decoupled.
+// Per the original spec, Reel Builder mirrors Post Builder's visual
+// language but does NOT import from CarouselSlide.tsx.
 
 // 9:16 portrait, the IG Reel cover spec.
 export const REEL_WIDTH = 1080;
 export const REEL_HEIGHT = 1920;
 
-// The bottom region is a 1080×1350 mirror of the Post Builder cover.
-// The top region holds the "See description ↓" CTA. These constants
-// are the Post Builder cover's known-good padding values — mirrored
-// so the reel and the carousel cover are pixel-aligned.
-export const REEL_COVER_HEIGHT = 1350;
-export const REEL_TOP_ZONE_HEIGHT = REEL_HEIGHT - REEL_COVER_HEIGHT; // 570
-export const COVER_PADDING_TOP = 240;
-export const COVER_PADDING_BOTTOM = 380;
-export const COVER_PADDING_X = 80;
+// ── Absolute y-positions for each block ─────────────────────────────
+// "See description ↓" lives in the top zone, tight chevron right
+// below the text (was 24px gap before — too airy; now ~12px).
+export const SEE_DESC_TEXT_Y = 110;
+export const SEE_DESC_CHEVRON_Y = 200;
 
-// Reel palettes mirror the Post Builder cover palettes (dark, navy,
-// forest) so a reel and a carousel cover with the same bg key look
-// identical. Default is "dark" because the user's reference screenshot
-// uses the dark palette.
-export type ReelBg = "dark" | "navy" | "forest";
+// Hook block starts at ~20% from the top of the reel — same visual
+// proportion as Post Builder's 240/1350 cover (~17.8%).
+export const HOOK_BLOCK_TOP = 380;
+// Max height of the hook block so a 5-line headline + subtitle never
+// crashes into the profile row.
+export const HOOK_BLOCK_MAX_HEIGHT = 720;
+
+// Profile row top. Pinned at ~61% from top so it stays well above
+// the IG bottom-UI overlay zone (which starts ~70% on most phones).
+export const PROFILE_ROW_TOP = 1170;
+
+// Side padding (X). Same 80px as Post Builder.
+export const SIDE_PAD = 80;
+
+// ── Background palettes ────────────────────────────────────────────
+// Mirror Post Builder's full 7-palette set so the reel's bg picker
+// has 1:1 parity with the carousel's.
+export type ReelBg =
+  | "white"
+  | "soft"
+  | "yellow"
+  | "dark"
+  | "cream"
+  | "forest"
+  | "navy";
 
 export interface ReelBgPalette {
   bg: string;
@@ -50,14 +60,56 @@ export interface ReelBgPalette {
 }
 
 export const REEL_BG_PALETTES: Record<ReelBg, ReelBgPalette> = {
+  white: { bg: "#FFFFFF", fg: "#0F1419", muted: "#6B7280", accent: "#2E86AB" },
+  soft: { bg: "#EEF2F6", fg: "#0F1419", muted: "#6B7280", accent: "#3290B5" },
+  yellow: { bg: "#F5B935", fg: "#0F1419", muted: "#5C4A1F", accent: "#0F1419" },
   dark: { bg: "#0F1419", fg: "#FFFFFF", muted: "#9CA3AF", accent: "#5FB4D2" },
-  navy: { bg: "#0F2645", fg: "#F8FAFC", muted: "#94A8C7", accent: "#FF8C5C" },
+  cream: { bg: "#F7F0E1", fg: "#2A1F0F", muted: "#76624A", accent: "#B8501F" },
   forest: { bg: "#1B3A2F", fg: "#F5F0E1", muted: "#9DBAA9", accent: "#E8B042" },
+  navy: { bg: "#0F2645", fg: "#F8FAFC", muted: "#94A8C7", accent: "#FF8C5C" },
 };
 
-// One of the 5 hook angles the API picks from. Surfaced as a label
-// under each variation card so the user can see at a glance what
-// flavor each variation is.
+export const REEL_BG_LABELS: Record<ReelBg, string> = {
+  white: "White",
+  soft: "Soft",
+  yellow: "Yellow",
+  dark: "Dark",
+  cream: "Cream",
+  forest: "Forest",
+  navy: "Navy",
+};
+
+export const REEL_BG_ORDER: ReelBg[] = [
+  "dark",
+  "navy",
+  "forest",
+  "white",
+  "soft",
+  "yellow",
+  "cream",
+];
+
+// ── Font choices ───────────────────────────────────────────────────
+// Mirror Post Builder's profile fonts so a reel matches the user's
+// chosen font for their feed.
+export type ReelFont = "sans" | "serif" | "display" | "rounded";
+
+export const REEL_FONTS: Record<ReelFont, string> = {
+  sans: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  serif: "'Lora', Georgia, 'Times New Roman', serif",
+  display: "'DM Serif Display', 'Lora', Georgia, serif",
+  rounded:
+    "'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+};
+
+export const REEL_FONT_LABELS: Record<ReelFont, string> = {
+  sans: "Sans (Inter)",
+  serif: "Serif (Lora)",
+  display: "Display",
+  rounded: "Rounded",
+};
+
+// ── Hook angle types (unchanged) ───────────────────────────────────
 export type ReelHookAngle =
   | "counter-intuitive"
   | "list-promise"
@@ -73,7 +125,6 @@ export const HOOK_ANGLE_LABELS: Record<ReelHookAngle, string> = {
   question: "Question",
 };
 
-// One generated variation. Returned by the API in groups of 3.
 export interface ReelVariation {
   angle: ReelHookAngle;
   hookHeadline: string;
@@ -85,22 +136,18 @@ export interface ReelGenerationResult {
   variations: ReelVariation[];
 }
 
-// Hard cap for IG captions (officially 2,200). Soft cap shown in the
-// UI as the safe target. Past 2,000 we warn (yellow), past 2,200 we
-// truncate at the last full sentence.
+// ── Caption + headline limits ──────────────────────────────────────
 export const CAPTION_HARD_CAP = 2200;
 export const CAPTION_SOFT_CAP = 2000;
 
-// Max headline length / words. Mirrors Post Builder cover constraints
-// so reels read with the same compression.
 export const HEADLINE_MAX_CHARS = 40;
 export const HEADLINE_MAX_WORDS = 7;
 export const HEADLINE_MAX_WORD_CHARS = 12;
 export const SUBTITLE_MAX_CHARS = 60;
 
 // Pick a default bg for a variation index. Default to "dark" (matches
-// the reference screenshot), then cycle navy → forest so the 3 cards
-// look visually distinct without the user having to override.
+// the user's reference screenshot), then cycle navy → forest so the 3
+// cards look visually distinct without the user having to override.
 export function defaultBgForIndex(i: number): ReelBg {
   const order: ReelBg[] = ["dark", "navy", "forest"];
   return order[i % order.length];

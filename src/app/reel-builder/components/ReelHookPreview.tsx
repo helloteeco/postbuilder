@@ -1,46 +1,42 @@
 "use client";
 
-// Renders one 1080×1920 reel cover. The layout is split into two zones:
+// Renders one 1080×1920 reel cover. Layout is absolute-positioned so
+// each block lands in a fixed pixel position regardless of content
+// length. The y-coordinates are tuned in reelTemplate.ts for the IG
+// Reels safe zone (no content under the bottom UI overlay) and for
+// visual parity with the Post Builder cover (headline ~20% from top,
+// profile row ~61% from top, breathing room everywhere).
 //
-//   • TOP (570px tall): "See description ↓" CTA + chevron, vertically
-//     centered. Bigger than IG's caption peek so it reads at a glance.
+//   y=110   "See description ↓"   — title text, 64pt bold
+//   y=200   ↓                     — chevron, 96pt accent
+//   y=380   Headline (132pt)      — Post Builder cover values
+//           Subtitle (48pt muted) — 28px below headline
+//   y=1170  [avatar] Name ✓
+//                   @handle       — compact profile row
 //
-//   • BOTTOM (1350px tall): a pixel-identical mirror of Post Builder's
-//     slide-1 cover layout. Same padding (240/80/380), same headline
-//     font (132pt bold, lineHeight 1.04, letterSpacing -0.025em),
-//     same subtitle (48pt at 28px margin in palette.muted), same
-//     compact profile row at the bottom (avatar 128, name 46pt,
-//     handle 38pt, verified-check 52pt). Visual parity is the whole
-//     point — when the user downloads the reel, the bottom 1350px
-//     looks exactly like a Post Builder cover.
-//
-// Two render modes:
-//   - When `scale` is set (in-page preview card), the entire 1080×1920
-//     node is CSS-scaled.
-//   - When `scale` is undefined (offscreen export node used by the
-//     html-to-image pipeline), it renders at full size with no
-//     transform applied.
-//
-// We deliberately re-implement the renderer instead of importing from
-// CarouselSlide.tsx — Reel Builder is a separate feature per the
-// original spec and shouldn't share files with Post Builder.
+// We deliberately re-implement the renderer instead of importing
+// CarouselSlide.tsx — Reel Builder is a separate feature.
 
 import { forwardRef } from "react";
 import {
-  COVER_PADDING_BOTTOM,
-  COVER_PADDING_TOP,
-  COVER_PADDING_X,
+  HOOK_BLOCK_MAX_HEIGHT,
+  HOOK_BLOCK_TOP,
+  PROFILE_ROW_TOP,
   REEL_BG_PALETTES,
-  REEL_COVER_HEIGHT,
+  REEL_FONTS,
   REEL_HEIGHT,
-  REEL_TOP_ZONE_HEIGHT,
   REEL_WIDTH,
+  SEE_DESC_CHEVRON_Y,
+  SEE_DESC_TEXT_Y,
+  SIDE_PAD,
   type ReelBg,
+  type ReelFont,
 } from "@/app/reel-builder/lib/reelTemplate";
 import type { ReelProfile } from "@/app/reel-builder/lib/reelProfile";
 
 interface Props {
   bg: ReelBg;
+  font: ReelFont;
   headline: string;
   subtitle?: string;
   profile: ReelProfile;
@@ -69,7 +65,6 @@ function avatarInitial(displayName: string): string {
   return displayName.trim().charAt(0).toUpperCase() || "?";
 }
 
-// Twitter-style verified check, blue. Same SVG paths as Post Builder.
 function VerifiedCheck({ size = 52 }: { size?: number }) {
   return (
     <svg
@@ -91,77 +86,12 @@ function VerifiedCheck({ size = 52 }: { size?: number }) {
   );
 }
 
-// Compact profile row at the bottom of the cover area. Mirrors
-// ProfileRowCompact in CarouselSlide.tsx (avatar 128, name 46pt,
-// handle 38pt, verified 52pt, gradient avatar fallback).
-function ProfileRowCompact({
-  profile,
-  fg,
-  muted,
-}: {
-  profile: ReelProfile;
-  fg: string;
-  muted: string;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
-      <div
-        style={{
-          width: 128,
-          height: 128,
-          borderRadius: "50%",
-          overflow: "hidden",
-          background:
-            "linear-gradient(145deg, #F5B935 0%, #E8A420 50%, #D99013 100%)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#fff",
-          fontSize: 52,
-          fontWeight: 700,
-          flexShrink: 0,
-        }}
-      >
-        {profile.avatarDataUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={profile.avatarDataUrl}
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            crossOrigin="anonymous"
-          />
-        ) : (
-          avatarInitial(profile.displayName)
-        )}
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            fontSize: 46,
-            fontWeight: 700,
-            color: fg,
-            lineHeight: 1.1,
-          }}
-        >
-          <span>{profile.displayName || "Your Name"}</span>
-          {profile.verified && <VerifiedCheck size={52} />}
-        </div>
-        <div style={{ fontSize: 38, color: muted, lineHeight: 1.1 }}>
-          {profile.handle || "@handle"}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPreview(
-  { bg, headline, subtitle, profile, scale },
+  { bg, font, headline, subtitle, profile, scale },
   ref,
 ) {
   const palette = REEL_BG_PALETTES[bg];
+  const fontFamily = REEL_FONTS[font];
   const transform = scale ? `scale(${scale})` : undefined;
 
   return (
@@ -172,96 +102,148 @@ const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPrevi
         height: REEL_HEIGHT,
         background: palette.bg,
         color: palette.fg,
-        fontFamily:
-          "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        fontFamily,
         textAlign: "left",
+        position: "relative",
         overflow: "hidden",
         transform,
         transformOrigin: "top left",
-        display: "flex",
-        flexDirection: "column",
       }}
     >
-      {/* TOP ZONE — "See description ↓" + chevron, centered in 570px */}
+      {/* "See description" — single line, centered. Fixed y. */}
       <div
         style={{
-          width: REEL_WIDTH,
-          height: REEL_TOP_ZONE_HEIGHT,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 24,
-          flexShrink: 0,
+          position: "absolute",
+          top: SEE_DESC_TEXT_Y,
+          left: 0,
+          right: 0,
+          textAlign: "center",
+          fontSize: 64,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          color: palette.fg,
+          lineHeight: 1,
         }}
       >
-        <div
-          style={{
-            fontSize: 56,
-            fontWeight: 700,
-            color: palette.fg,
-            letterSpacing: 0.5,
-          }}
-        >
-          See description ↓
-        </div>
-        <div
-          style={{
-            fontSize: 130,
-            fontWeight: 900,
-            color: palette.accent,
-            lineHeight: 1,
-          }}
-        >
-          ↓
-        </div>
+        See description ↓
       </div>
 
-      {/* BOTTOM ZONE — pixel-identical mirror of Post Builder cover */}
+      {/* Chevron, tight to the text above (gap ~10px). */}
       <div
         style={{
-          width: REEL_WIDTH,
-          height: REEL_COVER_HEIGHT,
-          padding: `${COVER_PADDING_TOP}px ${COVER_PADDING_X}px ${COVER_PADDING_BOTTOM}px`,
-          boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          overflowWrap: "break-word",
-          flexShrink: 0,
+          position: "absolute",
+          top: SEE_DESC_CHEVRON_Y,
+          left: 0,
+          right: 0,
+          textAlign: "center",
+          fontSize: 96,
+          fontWeight: 900,
+          color: palette.accent,
+          lineHeight: 1,
         }}
       >
-        {/* Hook block. Same maxHeight clamp as Post Builder so the
-            headline never crashes into the profile row. */}
-        <div style={{ maxHeight: 510, overflow: "hidden" }}>
+        ↓
+      </div>
+
+      {/* Hook block — pinned at HOOK_BLOCK_TOP, max-height clamped so
+          a long headline never crashes into the profile row. */}
+      <div
+        style={{
+          position: "absolute",
+          top: HOOK_BLOCK_TOP,
+          left: SIDE_PAD,
+          right: SIDE_PAD,
+          maxHeight: HOOK_BLOCK_MAX_HEIGHT,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 132,
+            fontWeight: 700,
+            lineHeight: 1.04,
+            letterSpacing: "-0.025em",
+            overflowWrap: "break-word",
+          }}
+        >
+          {renderInline(headline || "Your reel hook", palette.accent)}
+        </div>
+        {subtitle && subtitle.trim().length > 0 && (
           <div
             style={{
-              fontSize: 132,
-              fontWeight: 700,
-              lineHeight: 1.04,
-              letterSpacing: "-0.025em",
+              marginTop: 28,
+              fontSize: 48,
+              lineHeight: 1.3,
+              color: palette.muted,
+              overflowWrap: "break-word",
             }}
           >
-            {renderInline(headline || "Your reel hook", palette.accent)}
+            {renderInline(subtitle, palette.accent)}
           </div>
-          {subtitle && subtitle.trim().length > 0 && (
-            <div
-              style={{
-                marginTop: 28,
-                fontSize: 48,
-                lineHeight: 1.3,
-                color: palette.muted,
-              }}
-            >
-              {renderInline(subtitle, palette.accent)}
-            </div>
+        )}
+      </div>
+
+      {/* Profile row — pinned at PROFILE_ROW_TOP. Compact (avatar 128,
+          name 46pt, handle 38pt) — exact Post Builder values. */}
+      <div
+        style={{
+          position: "absolute",
+          top: PROFILE_ROW_TOP,
+          left: SIDE_PAD,
+          right: SIDE_PAD,
+          display: "flex",
+          alignItems: "center",
+          gap: 28,
+        }}
+      >
+        <div
+          style={{
+            width: 128,
+            height: 128,
+            borderRadius: "50%",
+            overflow: "hidden",
+            background:
+              "linear-gradient(145deg, #F5B935 0%, #E8A420 50%, #D99013 100%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
+            fontSize: 52,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          {profile.avatarDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profile.avatarDataUrl}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              crossOrigin="anonymous"
+            />
+          ) : (
+            avatarInitial(profile.displayName)
           )}
         </div>
-        <ProfileRowCompact
-          profile={profile}
-          fg={palette.fg}
-          muted={palette.muted}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              fontSize: 46,
+              fontWeight: 700,
+              color: palette.fg,
+              lineHeight: 1.1,
+            }}
+          >
+            <span>{profile.displayName || "Your Name"}</span>
+            {profile.verified && <VerifiedCheck size={52} />}
+          </div>
+          <div style={{ fontSize: 38, color: palette.muted, lineHeight: 1.1 }}>
+            {profile.handle || "@handle"}
+          </div>
+        </div>
       </div>
     </div>
   );
