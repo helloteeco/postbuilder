@@ -20,25 +20,49 @@
 export const REEL_WIDTH = 1080;
 export const REEL_HEIGHT = 1920;
 
-// ── Absolute y-positions for each block ─────────────────────────────
-// "See description ↓" lives in the top zone, tight chevron right
-// below the text (was 24px gap before — too airy; now ~12px).
-export const SEE_DESC_TEXT_Y = 110;
-export const SEE_DESC_CHEVRON_Y = 200;
+// ── Layout strategy ────────────────────────────────────────────────
+//
+// To keep the user's IG profile grid uniform, the reel EMBEDS a
+// pixel-identical 1080×1350 Post Builder cover (the same 4:5 ratio IG
+// uses for feed posts) centered vertically inside the 1080×1920
+// reel. This way:
+//
+//   • When IG shows the reel in the 4:5 profile-grid cell (the most
+//     common modern grid), it center-crops the reel to 1080×1350
+//     starting at y=285 — which captures the embedded cover EXACTLY,
+//     so the grid thumbnail is identical to a Post Builder feed post.
+//
+//   • When IG center-crops to 1:1 (older grid view, story sticker,
+//     etc.), it takes the middle 1080×1080 — y=420 to y=1500. Inside
+//     the embedded cover that's relative y=135 to y=1215, the same
+//     center-crop a Post Builder feed post would get. Headline + face
+//     land at identical positions.
+//
+//   • When played at full 9:16 in the Reels tab, the cover content
+//     sits in the middle of the screen with "See description ↓" above
+//     and an empty bg band below (where IG's UI overlays anyway).
+//
+// The embedded cover uses the EXACT same padding (240/80/380), font
+// sizes (132 headline, 48 subtitle), and compact profile row (avatar
+// 128, name 46pt, handle 38pt) as Post Builder. That's what keeps
+// the text + face uniform between both formats.
 
-// Hook block starts at ~20% from the top of the reel — same visual
-// proportion as Post Builder's 240/1350 cover (~17.8%).
-export const HOOK_BLOCK_TOP = 380;
-// Max height of the hook block so a 5-line headline + subtitle never
-// crashes into the profile row.
-export const HOOK_BLOCK_MAX_HEIGHT = 720;
+// Cover area embedded inside the reel.
+export const COVER_AREA_TOP = 285; // (1920 - 1350) / 2 = 285
+export const COVER_AREA_HEIGHT = 1350;
+export const COVER_PADDING_TOP = 240;
+export const COVER_PADDING_BOTTOM = 380;
+export const COVER_PADDING_X = 80;
+// Hook-block max-height inside the cover. Same value Post Builder
+// uses to keep the headline from crashing into the profile row.
+export const COVER_HOOK_MAX_HEIGHT = 510;
 
-// Profile row top. Pinned at ~61% from top so it stays well above
-// the IG bottom-UI overlay zone (which starts ~70% on most phones).
-export const PROFILE_ROW_TOP = 1170;
-
-// Side padding (X). Same 80px as Post Builder.
-export const SIDE_PAD = 80;
+// "See description ↓" lives in the top empty band (y=0 to y=285).
+// Single line, with the chevron immediately below — no oceanic gap.
+// Vertically tucked above the cover so the IG reel-UI top overlay
+// (~y=0 to y=80) doesn't hide it.
+export const SEE_DESC_TEXT_Y = 95;
+export const SEE_DESC_CHEVRON_Y = 175;
 
 // ── Background palettes ────────────────────────────────────────────
 // Mirror Post Builder's full 7-palette set so the reel's bg picker
