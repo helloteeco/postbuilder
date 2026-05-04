@@ -22,6 +22,7 @@ import {
   loadStories,
   parseBulkStories,
   replaceStory,
+  suggestPillarsForStory,
   type Story,
 } from "@/app/coach/lib/storyBank";
 
@@ -113,7 +114,14 @@ export default function StoryBank({ onChange }: Props) {
 
   function parseBulk() {
     const parsed = parseBulkStories(bulkRaw);
-    setBulkDrafts(parsed.map((p) => ({ ...p, pillarIds: [] })));
+    // Auto-tag each draft with its best-fit pillar(s) based on keyword
+    // overlap. User reviews and adjusts before saving.
+    setBulkDrafts(
+      parsed.map((p) => ({
+        ...p,
+        pillarIds: suggestPillarsForStory(p.body, pillars, 2),
+      })),
+    );
   }
 
   function saveBulk() {
@@ -232,6 +240,10 @@ export default function StoryBank({ onChange }: Props) {
           onTitle={setTitle}
           onBody={setBody}
           onTogglePillar={togglePillar}
+          onSuggestPillars={() => {
+            const suggested = suggestPillarsForStory(body, pillars, 2);
+            setPillarIds(suggested);
+          }}
           onSave={saveSingle}
           onCancel={resetForm}
         />
@@ -285,6 +297,7 @@ interface SingleStoryFormProps {
   onTitle: (v: string) => void;
   onBody: (v: string) => void;
   onTogglePillar: (id: string) => void;
+  onSuggestPillars: () => void;
   onSave: () => void;
   onCancel: () => void;
 }
@@ -298,6 +311,7 @@ function SingleStoryForm({
   onTitle,
   onBody,
   onTogglePillar,
+  onSuggestPillars,
   onSave,
   onCancel,
 }: SingleStoryFormProps) {
@@ -325,9 +339,20 @@ function SingleStoryForm({
         />
       </label>
       <div>
-        <div className="mb-1 text-xs text-gray-600">
-          Tag with pillar(s) — the prompt builder surfaces this story when you
-          generate posts for that pillar
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="text-xs text-gray-600">
+            Tag with pillar(s) — the prompt builder surfaces this story when
+            you generate posts for that pillar
+          </span>
+          <button
+            type="button"
+            onClick={onSuggestPillars}
+            disabled={!body.trim()}
+            className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-100 disabled:opacity-40"
+            title="Auto-pick pillars based on keyword overlap with this story"
+          >
+            ✨ Suggest pillars
+          </button>
         </div>
         <PillarChips
           ids={pillarIds}
@@ -415,9 +440,15 @@ function BulkPasteForm({
 
       {drafts.length > 0 && (
         <>
-          <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-            {drafts.length} candidate{drafts.length === 1 ? "" : "s"} — review,
-            tag pillars, and save
+          <div className="space-y-0.5">
+            <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              {drafts.length} candidate{drafts.length === 1 ? "" : "s"} —
+              review and save
+            </div>
+            <div className="text-[11px] text-gray-500">
+              ✨ Pillars auto-tagged based on each story&apos;s keywords. Adjust
+              the chips if anything looks off.
+            </div>
           </div>
           <ul className="space-y-2">
             {drafts.map((d, i) => (

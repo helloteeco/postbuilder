@@ -124,6 +124,106 @@ export function dailyStoriesForPillar(
   return shuffled.slice(0, count);
 }
 
+// ── Auto-classifier ────────────────────────────────────────────────
+//
+// Suggests which pillar(s) a story fits based on keyword overlap with
+// each pillar's name + description + topic bank. Cheap heuristic: no
+// API call, no model — just tokenize both sides, count matches, return
+// the top N pillars. Good enough to save the user the 80% of clicks
+// where the right pillar is obvious; they can still adjust the rest.
+//
+// Works for ANY pillar set (default seed or user-customized), since
+// keywords are derived from the pillar's own data at call time.
+
+import type { Pillar } from "./strategy";
+
+// Common English filler words that match across all pillars and add
+// noise. Only includes 3+ char words since the tokenizer already
+// drops 1-2 char tokens.
+const STOPWORDS = new Set([
+  "the", "and", "for", "with", "this", "that", "from", "your", "you",
+  "but", "have", "had", "has", "are", "was", "were", "what", "when",
+  "how", "why", "who", "out", "off", "all", "any", "can", "did", "get",
+  "got", "may", "new", "now", "old", "one", "two", "see", "way", "yet",
+  "own", "lot", "big", "top", "into", "onto", "over", "they", "them",
+  "their", "there", "here", "about", "where", "which", "while",
+  "would", "could", "should", "than", "then", "very", "much", "more",
+  "most", "some", "many", "every", "each", "also", "just", "even",
+  "still", "only", "really", "actually", "always", "never", "often",
+  "sometimes", "again", "another", "other", "same", "different",
+  "doing", "doesn", "didn", "won", "wasn", "weren", "isn", "aren",
+  "been", "being", "before", "after", "during", "between", "across",
+  "through", "without", "within", "around", "above", "below",
+  "because", "since", "until", "though", "instead", "rather", "either",
+  "neither", "both", "few", "less", "least", "first", "last", "next",
+  "thing", "things", "stuff", "kind", "sort", "type", "way", "ways",
+  "back", "forth", "going", "make", "made", "makes", "take", "took",
+  "taking", "give", "gave", "given", "let", "lets", "say", "said",
+  "says", "tell", "told", "tells", "use", "used", "using", "want",
+  "wanted", "wants", "need", "needs", "needed", "know", "knew", "known",
+  "knows", "think", "thought", "thinks", "feel", "felt", "feels",
+  "look", "looked", "looking", "looks", "find", "found", "finds",
+  "come", "came", "comes", "coming", "year", "years", "month", "months",
+  "week", "weeks", "day", "days", "today", "yesterday", "tomorrow",
+]);
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    // Keep $ and % so dollar amounts / percentages survive tokenization.
+    .split(/[^a-z0-9$%]+/)
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
+function buildPillarKeywords(pillar: Pillar): Set<string> {
+  const text = [pillar.name, pillar.description, ...pillar.topics].join(" ");
+  return new Set(tokenize(text));
+}
+
+// Suggest up to `max` pillar IDs that the story body likely belongs to.
+// Returns IDs sorted by descending match score; pillars with zero
+// matches are excluded. Caller should treat this as a starting point —
+// user adjustment is always allowed.
+export function suggestPillarsForStory(
+  storyBody: string,
+  pillars: Pillar[],
+  max = 2,
+): string[] {
+  const tokens = new Set(tokenize(storyBody));
+  if (tokens.size === 0 || pillars.length === 0) return [];
+
+  const scored = pillars.map((p) => {
+    const keywords = buildPillarKeywords(p);
+    let score = 0;
+    keywords.forEach((kw) => {
+      if (tokens.has(kw)) score++;
+    });
+    return { id: p.id, score };
+  });
+
+  // Threshold: require at least 2 matches OR a clear lead over the
+  // runner-up. Single-match results are too noisy — almost any story
+  // about money will match "tax-money" with a single hit on "money."
+  const filtered = scored.filter((s) => s.score >= 2);
+  if (filtered.length === 0) {
+    // Fallback: if nothing crosses the 2-match threshold but one pillar
+    // clearly leads (≥1 match and ≥2× the next-best), still tag it.
+    const sorted = scored.sort((a, b) => b.score - a.score);
+    if (
+      sorted[0].score >= 1 &&
+      (sorted[1]?.score ?? 0) * 2 <= sorted[0].score
+    ) {
+      return [sorted[0].id];
+    }
+    return [];
+  }
+
+  return filtered
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map((s) => s.id);
+}
+
 // Bulk parser for the "paste from Claude.ai" flow. Splits on blank
 // lines (paragraph breaks) and treats each chunk as a candidate
 // story. First line of each chunk becomes the title when it looks
