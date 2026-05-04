@@ -130,13 +130,7 @@ export default function PostBuilder() {
         slides,
         caption,
         hooks,
-        input: {
-          mode: input.mode,
-          topic: input.topic,
-          text: input.text,
-          raw: input.raw,
-          igUrl: input.igUrl,
-        },
+        input: { topic: input.topic, text: input.text },
       });
       setHistory(loadHistory());
     }, 1200);
@@ -151,15 +145,16 @@ export default function PostBuilder() {
     setHooks(entry.hooks);
     setSelectedId(entry.slides[0]?.id ?? null);
     setActiveHistoryId(entry.id);
-    // Restore the input snapshot too so the user sees what they generated
-    // from. We deliberately skip images (too big for localStorage).
+    // Restore the input snapshot. We deliberately skip images (too big
+    // for localStorage). Legacy entries had separate text / raw / igUrl
+    // fields — collapse whichever has content into the single `text`
+    // field of the new shape.
+    const legacyText =
+      entry.input.text || entry.input.raw || entry.input.igUrl || "";
     setInput((prev) => ({
       ...prev,
-      mode: entry.input.mode,
       topic: entry.input.topic,
-      text: entry.input.text,
-      raw: entry.input.raw,
-      igUrl: entry.input.igUrl,
+      text: legacyText,
     }));
   }
 
@@ -180,13 +175,35 @@ export default function PostBuilder() {
     setBusy(true);
     setError(null);
     try {
+      const trimmedText = input.text.trim();
+      const looksLikeUnresolvedUrl =
+        /^https?:\/\/(?:www\.)?instagram\.com\//i.test(trimmedText);
+
+      // The text box is dual-purpose. If it contains an IG URL the
+      // user hasn't resolved yet, refuse to send it to /analyze
+      // verbatim — that'd produce a carousel about the URL string.
+      if (looksLikeUnresolvedUrl) {
+        setError(
+          "Click 'Resolve Instagram post' to fetch the post first, or replace the URL with your own draft text.",
+        );
+        setBusy(false);
+        return;
+      }
+
+      if (!trimmedText && input.images.length === 0) {
+        setError("Paste your draft text or drop screenshots first.");
+        setBusy(false);
+        return;
+      }
+
       const payload: Record<string, unknown> = { params };
       if (input.topic) payload.topic = input.topic;
-      if (input.mode === "screenshots" && input.images.length > 0) {
-        // iPhone PNG screenshots run 5-10MB each. Vercel caps request bodies
-        // at 4.5MB, so compress every image client-side before sending:
-        // resize to max 1600px on the longest side and re-encode as JPEG.
-        // Cuts payload ~10-25× with no visible quality loss for screenshots.
+      if (trimmedText) payload.rawSource = trimmedText;
+      if (input.images.length > 0) {
+        // iPhone PNG screenshots run 5-10MB each. Vercel caps request
+        // bodies at 4.5MB, so compress every image client-side: resize
+        // to max 1600px on the longest side and re-encode as JPEG.
+        // Cuts payload ~10-25× with no visible quality loss.
         try {
           payload.competitorImages = await Promise.all(
             input.images.map((d) => compressImageDataUrl(d)),
@@ -198,18 +215,6 @@ export default function PostBuilder() {
           setBusy(false);
           return;
         }
-      } else if (input.mode === "text" && input.text.trim()) {
-        payload.competitorText = input.text.trim();
-      } else if (input.mode === "raw" && input.raw.trim()) {
-        payload.rawSource = input.raw.trim();
-      } else if (input.mode === "instagram" && input.igUrl) {
-        setError("Resolve the Instagram URL first, then generate.");
-        setBusy(false);
-        return;
-      } else {
-        setError("Add some input — screenshots, text, or a resolved IG post.");
-        setBusy(false);
-        return;
       }
 
       const resp = await fetch("/api/post-builder/analyze", {
@@ -249,11 +254,8 @@ export default function PostBuilder() {
       // Snapshot this fresh post into history (limit 2). Skip images in
       // the input snapshot — they're huge data URLs.
       const entry = pushHistoryEntry(post, {
-        mode: input.mode,
         topic: input.topic,
         text: input.text,
-        raw: input.raw,
-        igUrl: input.igUrl,
       });
       setHistory(loadHistory());
       setActiveHistoryId(entry.id);
@@ -265,12 +267,19 @@ export default function PostBuilder() {
   }
 
   async function onFetchIg() {
+    // The unified text box also serves as the IG URL field. Pull the
+    // URL out of it; bail if there isn't one.
+    const url = input.text.trim();
+    if (!/^https?:\/\/(?:www\.)?instagram\.com\//i.test(url)) {
+      setIgStatus("Paste an Instagram URL into the content box first.");
+      return;
+    }
     setIgStatus("Fetching…");
     try {
       const resp = await fetch("/api/post-builder/fetch-ig", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: input.igUrl }),
+        body: JSON.stringify({ url }),
       });
       const data = (await resp.json()) as IgResponse;
       if (!data.ok) {
@@ -279,11 +288,11 @@ export default function PostBuilder() {
       }
       const caption = data.result.caption ?? "";
       const images: string[] = [];
-      for (const url of data.result.imageUrls) {
+      for (const igUrl of data.result.imageUrls) {
         try {
           // IG CDN blocks browser CORS — proxy through our server.
           const r = await fetch(
-            `/api/proxy-image?url=${encodeURIComponent(url)}`,
+            `/api/proxy-image?url=${encodeURIComponent(igUrl)}`,
           );
           const blob = await r.blob();
           const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -297,14 +306,19 @@ export default function PostBuilder() {
           // skip
         }
       }
+      // Replace the URL with the resolved caption + add fetched
+      // images alongside any the user dropped manually.
       setInput({
         ...input,
-        mode: images.length > 0 ? "screenshots" : "text",
-        text: input.text || caption,
+        text: caption,
         images: [...input.images, ...images],
       });
       setIgStatus(
-        `Resolved via ${data.result.source}. Switched you to ${images.length > 0 ? "Screenshots" : "Paste text"} tab.`,
+        `Resolved via ${data.result.source}. ${
+          images.length > 0
+            ? `${images.length} image${images.length === 1 ? "" : "s"} added below; caption pasted into the content box.`
+            : "Caption pasted into the content box. No images were retrievable — drop screenshots if you have them."
+        } Click Generate carousel when ready.`,
       );
     } catch (err) {
       setIgStatus(err instanceof Error ? err.message : String(err));

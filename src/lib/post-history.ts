@@ -19,12 +19,21 @@ import type { CarouselPost, Slide } from "@/lib/post-templates";
 const LS_KEY = "postBuilder.history";
 export const HISTORY_LIMIT = 2;
 
+// Snapshot of the user's input controls when they last generated.
+// New fields: topic + text. Legacy fields (mode / raw / igUrl) are
+// kept optional for backwards compatibility — the InputPanel was
+// simplified to a single text field, but old localStorage entries
+// have the previous shape and we want them to load gracefully.
 export interface SavedPostInputSnapshot {
-  mode: "screenshots" | "text" | "instagram" | "raw";
   topic: string;
   text: string;
-  raw: string;
-  igUrl: string;
+  // ── Legacy, optional ─────────────────────────────────────────
+  // Older saves split text/raw/igUrl across mode-specific fields.
+  // PostBuilder.handleLoadHistoryEntry collapses any of these into
+  // the single `text` field on read.
+  mode?: "screenshots" | "text" | "instagram" | "raw";
+  raw?: string;
+  igUrl?: string;
 }
 
 export interface SavedPost {
