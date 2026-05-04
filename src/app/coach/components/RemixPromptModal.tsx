@@ -68,9 +68,9 @@ export default function RemixPromptModal({ open, post, onClose }: Props) {
             </h2>
             <p className="mt-1 text-xs text-gray-600">
               Claude brainstorms 5 cover-hook angles internally, picks the
-              strongest one, and returns a single ready-to-publish post. Body
-              slides + CTA stay nearly identical — just paste straight into the
-              Post Builder.
+              strongest one, and rewrites every body slide in fresh wording —
+              same facts, same point per slide, visibly different writing. CTA
+              stays locked. Paste straight into the Post Builder.
             </p>
           </div>
           <button

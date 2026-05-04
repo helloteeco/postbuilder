@@ -944,7 +944,7 @@ function PostRow({
               type="button"
               onClick={onRemix}
               className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
-              title="Generate a Claude.ai prompt that returns a single remix of this post — fresh cover hook, body + CTA locked. Paste straight into Post Builder."
+              title="Generate a Claude.ai prompt that returns a single remix — fresh cover, every body slide rewritten in new wording (same facts), CTA locked. Paste straight into Post Builder."
             >
               ↻ Remix
             </button>
