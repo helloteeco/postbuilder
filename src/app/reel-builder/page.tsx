@@ -1,39 +1,45 @@
 "use client";
 
-// Main Reel Builder page. Wires the input form → API call → 3 variation
-// cards. Each card has:
-//   • Editable headline + subtitle (live preview, **bold** highlights
-//     in accent color, asterisks stripped on export)
-//   • Editable caption textarea
-//   • Per-card bg picker (7 Post Builder palettes)
+// Main Reel Builder page. Wires together:
+//   • ProfileEditor (shared with Post Builder, same localStorage key)
+//   • Input form → API call → 3 variation cards
+//   • Recent reels strip (last 2 saved batches, click to reload)
+//   • Help modal with "How to use" + "DIY in CapCut" tabs
+//   • Per-card editable headline / subtitle / caption
+//   • Per-card bg picker (7 PB palettes)
+//   • Send-to-tracker handoff (queues a Coach Mode pending draft with
+//     hook + caption flattened into SlideContent[] for structural
+//     analysis, exact same pipeline Post Builder uses)
 //   • Save-to-favorites + MP4 / PNG export
 //
-// Font picker is global (matches Post Builder's "font is part of the
-// profile" semantics) and applies to every variation + favorite.
-//
 // Hidden offscreen export nodes hold the full 1080×1920 versions used
-// by html-to-image — same trick Post Builder uses.
+// by html-to-image.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import ProfileEditor from "@/components/post-builder/ProfileEditor";
+import { DEFAULT_PROFILE, type PostBuilderProfile } from "@/lib/post-templates";
+import {
+  addPendingDraft,
+  cleanTitle,
+} from "@/app/coach/lib/pendingDraft";
 import ReelInputForm from "./components/ReelInputForm";
 import ReelHookPreview from "./components/ReelHookPreview";
 import ReelCaptionPreview from "./components/ReelCaptionPreview";
+import RecentReels from "./components/RecentReels";
+import ReelGuides from "./components/ReelGuides";
 import {
   defaultBgForIndex,
   HOOK_ANGLE_LABELS,
   REEL_BG_LABELS,
   REEL_BG_ORDER,
   REEL_BG_PALETTES,
-  REEL_FONT_LABELS,
   REEL_HEIGHT,
   REEL_WIDTH,
   type ReelBg,
-  type ReelFont,
   type ReelGenerationResult,
   type ReelVariation,
 } from "./lib/reelTemplate";
 import { generateReels } from "./lib/reelGeneration";
-import { loadReelProfile, type ReelProfile } from "./lib/reelProfile";
 import {
   addFavorite,
   loadFavorites,
@@ -45,29 +51,41 @@ import {
   exportReelAsPng,
   type ExportProgress,
 } from "./lib/videoExport";
+import {
+  deleteReelHistory,
+  loadReelHistory,
+  promoteReelHistory,
+  pushReelHistory,
+  updateCurrentReelHistory,
+  type SavedReelBatch,
+} from "./lib/reelHistory";
+import { slidesFromReel } from "./lib/slidesFromReel";
 
-// Width of the in-page preview card. Reel is 1080 wide; we scale it
-// down to ~280px so 3 cards fit side by side at desktop widths.
+// In-page preview width. Reel is 1080 wide; we scale it down to ~280px
+// so 3 cards fit side by side at desktop widths.
 const PREVIEW_WIDTH = 280;
 const PREVIEW_SCALE = PREVIEW_WIDTH / REEL_WIDTH;
+
+type SendStatus = "idle" | "sent";
 
 interface CardState {
   bg: ReelBg;
   variation: ReelVariation;
   exportStatus: ExportProgress | null;
   exportBusy: boolean;
+  sendStatus: SendStatus;
 }
-
-const FONT_LS_KEY = "reel_font";
 
 export default function ReelBuilderPage() {
   const [source, setSource] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [profile, setProfile] = useState<ReelProfile | null>(null);
-  const [font, setFont] = useState<ReelFont>("sans");
+  const [profile, setProfile] = useState<PostBuilderProfile>(DEFAULT_PROFILE);
   const [cards, setCards] = useState<CardState[]>([]);
   const [favorites, setFavorites] = useState<ReelFavorite[]>([]);
+  const [history, setHistory] = useState<SavedReelBatch[]>([]);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState<"how-to" | "capcut" | null>(null);
 
   const cardExportRefs = useRef<(HTMLDivElement | null)[]>([]);
   const favExportRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -75,23 +93,46 @@ export default function ReelBuilderPage() {
   favExportRefs.current = favorites.map((_, i) => favExportRefs.current[i] ?? null);
 
   useEffect(() => {
-    setProfile(loadReelProfile());
     setFavorites(loadFavorites());
-    try {
-      const f = localStorage.getItem(FONT_LS_KEY) as ReelFont | null;
-      if (f && f in REEL_FONT_LABELS) setFont(f);
-    } catch {
-      /* ignore */
-    }
+    setHistory(loadReelHistory());
   }, []);
 
-  function persistFont(next: ReelFont) {
-    setFont(next);
-    try {
-      localStorage.setItem(FONT_LS_KEY, next);
-    } catch {
-      /* ignore */
-    }
+  // Auto-save the active history entry when the user edits the cards
+  // or the source. Debounced ~1.2s to avoid thrashing localStorage on
+  // every keystroke. Mirrors Post Builder's history auto-save.
+  useEffect(() => {
+    if (cards.length === 0) return;
+    if (!activeHistoryId) return;
+    const t = setTimeout(() => {
+      updateCurrentReelHistory({
+        source,
+        cards: cards.map((c) => ({ bg: c.bg, variation: c.variation })),
+      });
+      setHistory(loadReelHistory());
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [cards, source, activeHistoryId]);
+
+  function handleLoadHistory(entry: SavedReelBatch) {
+    const next = promoteReelHistory(entry.id);
+    setHistory(next);
+    setSource(entry.source);
+    setCards(
+      entry.cards.map((c) => ({
+        bg: c.bg,
+        variation: c.variation,
+        exportStatus: null,
+        exportBusy: false,
+        sendStatus: "idle",
+      })),
+    );
+    setActiveHistoryId(entry.id);
+  }
+
+  function handleDeleteHistory(id: string) {
+    const next = deleteReelHistory(id);
+    setHistory(next);
+    if (activeHistoryId === id) setActiveHistoryId(null);
   }
 
   async function handleGenerate() {
@@ -103,7 +144,15 @@ export default function ReelBuilderPage() {
         setError(`${res.errorCode ?? "ERROR"}: ${res.errorMessage ?? "Unknown error"}`);
         return;
       }
-      setCards(buildInitialCards(res.result));
+      const fresh = buildInitialCards(res.result);
+      setCards(fresh);
+      // Save to history.
+      const entry = pushReelHistory(
+        source,
+        fresh.map((c) => ({ bg: c.bg, variation: c.variation })),
+      );
+      setHistory(loadReelHistory());
+      setActiveHistoryId(entry.id);
     } finally {
       setBusy(false);
     }
@@ -157,6 +206,25 @@ export default function ReelBuilderPage() {
     setFavorites(loadFavorites());
   }
 
+  // Queue a Coach Mode pending draft from the variation. Hook +
+  // caption sections get flattened into SlideContent[] so Coach
+  // Mode's structural-fingerprint pipeline (format, hook style,
+  // named entities, bolded terms, CTA pattern) runs the same way it
+  // does on Post Builder carousels.
+  function handleSendToTracker(cardIdx: number) {
+    const c = cards[cardIdx];
+    if (!c) return;
+    addPendingDraft({
+      title: cleanTitle(c.variation.hookHeadline),
+      slides: slidesFromReel(c.variation),
+    });
+    setCardStatus(cardIdx, { sendStatus: "sent" });
+    window.setTimeout(
+      () => setCardStatus(cardIdx, { sendStatus: "idle" }),
+      2400,
+    );
+  }
+
   function handleRemoveFavorite(id: string) {
     removeFavorite(id);
     setFavorites(loadFavorites());
@@ -178,15 +246,8 @@ export default function ReelBuilderPage() {
     }
   }
 
-  const safeProfile = profile ?? {
-    displayName: "Dr. Jeff Chheuy",
-    handle: "@jeffchheuy",
-    avatarDataUrl: null,
-    verified: true,
-  };
-
   return (
-    <div className="mx-auto max-w-6xl space-y-5 p-6">
+    <div className="mx-auto max-w-7xl space-y-5 p-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reel Builder</h1>
@@ -195,44 +256,73 @@ export default function ReelBuilderPage() {
             long-form captions, ready to upload to Instagram.
           </p>
         </div>
-        <FontPicker value={font} onChange={persistFont} />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowHelp("how-to")}
+            className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            How to use
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowHelp("capcut")}
+            className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          >
+            DIY in CapCut
+          </button>
+        </div>
       </header>
 
-      {favorites.length > 0 && (
-        <FavoritesStrip
-          favorites={favorites}
-          profile={safeProfile}
-          font={font}
-          onRemove={handleRemoveFavorite}
-          onExport={handleExportFavorite}
-        />
-      )}
+      <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
+        <aside className="space-y-4">
+          <ProfileEditor profile={profile} onChange={setProfile} />
+        </aside>
 
-      <ReelInputForm
-        source={source}
-        onSourceChange={setSource}
-        onGenerate={handleGenerate}
-        busy={busy}
-        error={error}
-      />
+        <section className="space-y-5">
+          <RecentReels
+            history={history}
+            activeId={activeHistoryId}
+            onLoad={handleLoadHistory}
+            onDelete={handleDeleteHistory}
+          />
 
-      {cards.length > 0 && (
-        <section className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          {cards.map((c, i) => (
-            <VariationCard
-              key={i}
-              index={i}
-              card={c}
-              profile={safeProfile}
-              font={font}
-              onExport={handleExport}
-              onSaveFavorite={handleSaveFavorite}
-              onPatchVariation={patchVariation}
-              onSetBg={setCardBg}
+          {favorites.length > 0 && (
+            <FavoritesStrip
+              favorites={favorites}
+              profile={profile}
+              onRemove={handleRemoveFavorite}
+              onExport={handleExportFavorite}
             />
-          ))}
+          )}
+
+          <ReelInputForm
+            source={source}
+            onSourceChange={setSource}
+            onGenerate={handleGenerate}
+            busy={busy}
+            error={error}
+          />
+
+          {cards.length > 0 && (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              {cards.map((c, i) => (
+                <VariationCard
+                  key={i}
+                  index={i}
+                  card={c}
+                  profile={profile}
+                  onExport={handleExport}
+                  onSaveFavorite={handleSaveFavorite}
+                  onSendToTracker={handleSendToTracker}
+                  onPatchVariation={patchVariation}
+                  onSetBg={setCardBg}
+                />
+              ))}
+            </div>
+          )}
         </section>
-      )}
+      </div>
 
       {/* Hidden full-size export nodes — one per visible card + one per favorite */}
       <div
@@ -254,10 +344,9 @@ export default function ReelBuilderPage() {
           >
             <ReelHookPreview
               bg={c.bg}
-              font={font}
               headline={c.variation.hookHeadline}
               subtitle={c.variation.hookSubtitle}
-              profile={safeProfile}
+              profile={profile}
             />
           </div>
         ))}
@@ -271,14 +360,15 @@ export default function ReelBuilderPage() {
           >
             <ReelHookPreview
               bg={f.bg}
-              font={font}
               headline={f.variation.hookHeadline}
               subtitle={f.variation.hookSubtitle}
-              profile={safeProfile}
+              profile={profile}
             />
           </div>
         ))}
       </div>
+
+      <ReelGuides open={showHelp} onChange={setShowHelp} />
     </div>
   );
 }
@@ -289,6 +379,7 @@ function buildInitialCards(result: ReelGenerationResult): CardState[] {
     variation: v,
     exportStatus: null,
     exportBusy: false,
+    sendStatus: "idle",
   }));
 }
 
@@ -304,30 +395,6 @@ function filenameFor(
       .replace(/^-+|-+$/g, "")
       .slice(0, 40) || `variation-${index + 1}`;
   return `reel-${slug}.${format}`;
-}
-
-interface FontPickerProps {
-  value: ReelFont;
-  onChange: (next: ReelFont) => void;
-}
-
-function FontPicker({ value, onChange }: FontPickerProps) {
-  return (
-    <label className="flex items-center gap-2 text-xs text-gray-600">
-      <span className="font-semibold uppercase tracking-wider">Font</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as ReelFont)}
-        className="rounded border border-gray-300 px-2 py-1 text-sm font-medium"
-      >
-        {(Object.keys(REEL_FONT_LABELS) as ReelFont[]).map((f) => (
-          <option key={f} value={f}>
-            {REEL_FONT_LABELS[f]}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
 }
 
 interface BgPickerProps {
@@ -365,10 +432,10 @@ function BgPicker({ value, onChange }: BgPickerProps) {
 interface VariationCardProps {
   index: number;
   card: CardState;
-  profile: ReelProfile;
-  font: ReelFont;
+  profile: PostBuilderProfile;
   onExport: (idx: number, format: "mp4" | "png") => void;
   onSaveFavorite: (idx: number) => void;
+  onSendToTracker: (idx: number) => void;
   onPatchVariation: (idx: number, patch: Partial<ReelVariation>) => void;
   onSetBg: (idx: number, bg: ReelBg) => void;
 }
@@ -377,9 +444,9 @@ function VariationCard({
   index,
   card,
   profile,
-  font,
   onExport,
   onSaveFavorite,
+  onSendToTracker,
   onPatchVariation,
   onSetBg,
 }: VariationCardProps) {
@@ -397,7 +464,6 @@ function VariationCard({
       >
         <ReelHookPreview
           bg={card.bg}
-          font={font}
           headline={card.variation.hookHeadline}
           subtitle={card.variation.hookSubtitle}
           profile={profile}
@@ -476,6 +542,18 @@ function VariationCard({
             or download as PNG
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => onSendToTracker(index)}
+          className={`w-full rounded border px-3 py-1.5 text-xs font-medium transition ${
+            card.sendStatus === "sent"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+              : "border-gray-300 text-gray-700 hover:bg-gray-100"
+          }`}
+          title="Queue this reel in Coach Mode → Performance Tracker. You'll add the time posted + metrics later."
+        >
+          {card.sendStatus === "sent" ? "✓ Sent to tracker" : "Send to tracker"}
+        </button>
         {card.exportStatus && (
           <div
             className={`rounded p-2 text-[11px] ${
@@ -496,8 +574,7 @@ function VariationCard({
 
 interface FavoritesStripProps {
   favorites: ReelFavorite[];
-  profile: ReelProfile;
-  font: ReelFont;
+  profile: PostBuilderProfile;
   onRemove: (id: string) => void;
   onExport: (favIdx: number, format: "mp4" | "png") => void;
 }
@@ -505,7 +582,6 @@ interface FavoritesStripProps {
 function FavoritesStrip({
   favorites,
   profile,
-  font,
   onRemove,
   onExport,
 }: FavoritesStripProps) {
@@ -532,7 +608,6 @@ function FavoritesStrip({
               >
                 <ReelHookPreview
                   bg={f.bg}
-                  font={font}
                   headline={f.variation.hookHeadline}
                   subtitle={f.variation.hookSubtitle}
                   profile={profile}

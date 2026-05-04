@@ -5,36 +5,35 @@
 // Post Builder cover layout — same 240/80/380 padding, same 132pt
 // headline, same 48pt subtitle, same compact profile row. That way
 // the reel's profile-grid thumbnail (which IG center-crops to 4:5 or
-// 1:1) shows the headline + face in the same pixels as a Post
-// Builder feed post.
+// 1:1) shows the headline + face in the same pixels as a Post Builder
+// feed post.
 //
-// The "See description ↓" indicator sits BELOW the profile row in
-// the cover's bottom-padding zone (y=1290-1480). That's the spot
-// IG's grid view shows it (cropped inside the embedded cover) and
-// where it's still visible during playback (above IG's bottom-UI
-// overlay starting around y=1500).
+// "See description ↓" + chevron sit BELOW the profile row in the
+// cover's bottom-padding zone (y=1290-1480), LEFT-ALIGNED at x=80
+// to match the headline / subtitle / profile column. Centered felt
+// floaty against the rest of the left-aligned content; left-aligning
+// keeps the visual axis consistent while still letting the chevron
+// pop in the accent color.
 //
 //   y=0
-//   ┌────────────────────────┐  top empty band (285px) — covered by
-//   │                        │  IG's reel-UI top overlay during play
+//   ┌────────────────────────┐  top empty band — IG reel-UI overlay
 //   y=285
 //   ┌────────────────────────┐  EMBEDDED 1080×1350 PB COVER
-//   │ (240px top padding)    │  y=285-525
-//   │ Headline (132pt bold)  │  y=525  ← matches PB feed-post pixel
+//   │ Headline (132pt bold)  │  y=525
 //   │ Subtitle (48pt muted)  │
-//   │   ...                  │
-//   │ [avatar] Name ✓        │  y=1115 ← matches PB feed-post pixel
+//   │                        │
+//   │ [avatar] Name ✓        │  y=1115
 //   │          @handle       │
 //   │                        │
-//   │ See description        │  y=1290 ← grid-visible cue, sized
-//   │       ↓                │  y=1370   subordinate to headline
-//   │ (cover bottom padding) │
+//   │ See description ↓      │  y=1290 left-aligned, accent chevron
+//   │ ↓                      │  y=1370
 //   y=1635
-//   ┌────────────────────────┐  bottom empty band — IG UI overlay
+//   ┌────────────────────────┐  bottom band — IG bottom-UI overlay
 //   y=1920
 //
-// We deliberately re-implement the renderer instead of importing
-// CarouselSlide.tsx — Reel Builder is a separate feature.
+// Profile (font + name + handle + avatar + verified) comes from the
+// SAME postBuilder.profile localStorage key as Post Builder, so any
+// font/avatar/handle change in either feature propagates to both.
 
 import { forwardRef } from "react";
 import {
@@ -45,28 +44,36 @@ import {
   COVER_PADDING_TOP,
   COVER_PADDING_X,
   REEL_BG_PALETTES,
-  REEL_FONTS,
   REEL_HEIGHT,
   REEL_WIDTH,
   SEE_DESC_CHEVRON_Y,
   SEE_DESC_TEXT_Y,
   type ReelBg,
-  type ReelFont,
 } from "@/app/reel-builder/lib/reelTemplate";
-import type { ReelProfile } from "@/app/reel-builder/lib/reelProfile";
+import type { PostBuilderProfile, ProfileFont } from "@/lib/post-templates";
 
 interface Props {
   bg: ReelBg;
-  font: ReelFont;
   headline: string;
   subtitle?: string;
-  profile: ReelProfile;
+  profile: PostBuilderProfile;
   scale?: number;
 }
 
+const FONT_FAMILY: Record<ProfileFont, string> = {
+  sans: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  serif: "'Lora', Georgia, 'Times New Roman', serif",
+  display: "'DM Serif Display', 'Lora', Georgia, serif",
+  rounded: "'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+};
+
+function fontFamilyFor(profile: PostBuilderProfile): string {
+  return FONT_FAMILY[profile.font ?? "sans"];
+}
+
 // Renders **bold** and *emphasis* spans inline with the accent color.
-// Strips any leftover stray asterisks. Mirrors the Post Builder slide
-// renderer.
+// Strips any leftover stray asterisks. Mirrors Post Builder's
+// renderInline behavior.
 function renderInline(text: string, accentColor: string): React.ReactNode[] {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*)/g);
   return parts.map((part, i) => {
@@ -107,15 +114,12 @@ function VerifiedCheck({ size = 52 }: { size?: number }) {
   );
 }
 
-// Compact profile row — exact Post Builder values: avatar 128, name
-// 46pt bold, handle 38pt, verified check 52pt, gradient avatar
-// fallback. Identical to ProfileRowCompact in CarouselSlide.tsx.
 function ProfileRowCompact({
   profile,
   fg,
   muted,
 }: {
-  profile: ReelProfile;
+  profile: PostBuilderProfile;
   fg: string;
   muted: string;
 }) {
@@ -174,11 +178,11 @@ function ProfileRowCompact({
 }
 
 const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPreview(
-  { bg, font, headline, subtitle, profile, scale },
+  { bg, headline, subtitle, profile, scale },
   ref,
 ) {
   const palette = REEL_BG_PALETTES[bg];
-  const fontFamily = REEL_FONTS[font];
+  const fontFamily = fontFamilyFor(profile);
   const transform = scale ? `scale(${scale})` : undefined;
 
   return (
@@ -197,9 +201,7 @@ const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPrevi
         transformOrigin: "top left",
       }}
     >
-      {/* EMBEDDED 1080×1350 POST BUILDER COVER — identical layout to
-          CarouselSlide.tsx's hook-opener: padding 240/80/380, flex
-          column space-between, hook block at top, profile at bottom. */}
+      {/* EMBEDDED 1080×1350 POST BUILDER COVER */}
       <div
         style={{
           position: "absolute",
@@ -242,17 +244,17 @@ const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPrevi
         <ProfileRowCompact profile={profile} fg={palette.fg} muted={palette.muted} />
       </div>
 
-      {/* "See description ↓" — sits below the profile row inside the
-          cover's bottom-padding zone. Smaller and slightly muted so it
-          reads as a secondary "this is a video" cue, not competing
-          with the headline. Visible on the IG profile-grid thumbnail. */}
+      {/* "See description ↓" — left-aligned at x=80 (matches the
+          headline column) so it doesn't feel floaty against the rest
+          of the left-aligned cover content. Sized down + 0.85 opacity
+          so it reads as a secondary "video has more below" cue. */}
       <div
         style={{
           position: "absolute",
           top: SEE_DESC_TEXT_Y,
-          left: 0,
-          right: 0,
-          textAlign: "center",
+          left: COVER_PADDING_X,
+          right: COVER_PADDING_X,
+          textAlign: "left",
           fontSize: 52,
           fontWeight: 700,
           letterSpacing: 0.5,
@@ -267,9 +269,9 @@ const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPrevi
         style={{
           position: "absolute",
           top: SEE_DESC_CHEVRON_Y,
-          left: 0,
-          right: 0,
-          textAlign: "center",
+          left: COVER_PADDING_X,
+          right: COVER_PADDING_X,
+          textAlign: "left",
           fontSize: 76,
           fontWeight: 900,
           color: palette.accent,

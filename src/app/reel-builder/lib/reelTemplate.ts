@@ -131,27 +131,6 @@ export const REEL_BG_ORDER: ReelBg[] = [
   "cream",
 ];
 
-// ── Font choices ───────────────────────────────────────────────────
-// Mirror Post Builder's profile fonts so a reel matches the user's
-// chosen font for their feed.
-export type ReelFont = "sans" | "serif" | "display" | "rounded";
-
-export const REEL_FONTS: Record<ReelFont, string> = {
-  sans: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-  serif: "'Lora', Georgia, 'Times New Roman', serif",
-  display: "'DM Serif Display', 'Lora', Georgia, serif",
-  rounded:
-    "'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-};
-
-export const REEL_FONT_LABELS: Record<ReelFont, string> = {
-  sans: "Sans (Inter)",
-  serif: "Serif (Lora)",
-  display: "Display",
-  rounded: "Rounded",
-};
-
-// ── Hook angle types (unchanged) ───────────────────────────────────
 export type ReelHookAngle =
   | "counter-intuitive"
   | "list-promise"
