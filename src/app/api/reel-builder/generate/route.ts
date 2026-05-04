@@ -47,18 +47,18 @@ INPUT: The user's 10-section ghostwriter output (sections 1-10).
 OUTPUT: 3 reel variations. Each variation contains:
 
 1. A hook headline (slide-1 cover style)
-   - Maximum 7 words
-   - Maximum 40 characters
-   - No individual word over 12 characters
-   - Same hook formula style as the original section 1
-   - Different angle from the other 2 variations
+   - TARGET 32-38 characters (5-7 words) so it wraps cleanly into 3 BALANCED lines on the cover. 40 chars / 7 words is a hard cap, not a goal.
+   - No individual word over 12 characters (longer words orphan a line and break the layout).
+   - Same hook formula style as the original section 1.
+   - Different angle from the other 2 variations.
+   - FIT VERIFICATION before you output: the cover renders at 132pt on a 920px-wide canvas; each line fits ~12 characters. Mentally split your headline into the 3 lines it'd wrap to. Are they balanced? Is any single short word stranded? Does any word need to break across lines? If yes, rewrite — pick shorter synonyms, drop filler ("the", "a", "is"), or find a different angle that compresses cleaner. If you can't make a hook fit AND hit, change the angle, don't lengthen the hook.
    - REQUIRED: wrap 1-2 high-impact words in **double asterisks** so they render in the cover's accent color. Pick the words that ARE the hook — dollar amounts, percentages, specific numbers, surprise nouns, emotional triggers ($250K, hidden, never, free, secret, 16.4%, etc.). Never bold function words like "the", "is", "of". A headline with ZERO bolded words is invalid output.
    - REQUIRED: NO INSIDER JARGON. Write the headline so a viewer with zero context on the niche understands it instantly. Banned: niche acronyms (STR, ADR, RevPAR, OTA, PMS, ARV, BRRRR, COC, KPI, MQL, CAC, LTV, EBITDA, ROAS, NPS, etc.), industry shorthand ("the loophole", "1031", "buy box", "cap rate", "the stack") unless universally known to a non-specialist. Spelling the term in parentheses ("STR (short term rental)") is NOT a fix — it eats valuable hook space. Rephrase entirely. Prefer everyday brand names (Airbnb, Amazon, Google, Uber) and plain English (rental, guest, booking, customer, deal, profit) over insider terms. Bad: "8 things I learned starting my STR." Good: "8 things I learned hosting my first Airbnb." or "8 lessons from my first rental."
 
 2. An optional subtitle
-   - Maximum 60 characters
-   - Reinforces the headline
-   - REQUIRED: if the subtitle has 1-2 standout words (numbers, dates, dollar amounts, key nouns), wrap them in **double asterisks** for accent-color rendering. Same selection rule as the headline. Skip the bolding if the subtitle is short and there's no obvious standout — better to have no bold than a forced one.
+   - TARGET ≤45 characters to GUARANTEE single-line fit on the cover (rendered at 48pt across the 920px canvas). 60 chars is a hard cap and risks wrapping to 2 lines, which breaks the layout. Aim for ONE clean line.
+   - Must ADD NEW VALUE — a sharper detail, specific number, date, or concrete payoff that the headline doesn't already say. Do NOT paraphrase the headline. If the subtitle would just be a rephrase, OMIT it (set hookSubtitle to empty string).
+   - REQUIRED: if the subtitle has 1-2 standout words (numbers, dates, dollar amounts, key nouns), wrap them in **double asterisks** for accent-color rendering. Same selection rule as the headline. Skip the bolding if there's no obvious standout — better to have no bold than a forced one.
    - REQUIRED: NO INSIDER JARGON. Same rule as the headline — write for an outsider scrolling past. The CAPTION (below) may use precise industry terms once the reader has chosen to dig in, but the cover (headline + subtitle) is for attraction, not explanation.
 
 3. A long-form caption (1,400-2,000 characters, hard cap 2,200)

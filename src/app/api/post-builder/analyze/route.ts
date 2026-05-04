@@ -39,7 +39,14 @@ Reading level target: ${params.readingLevel}. Use short, plain words. No jargon.
 CARDINAL RULES — follow without exception:
 1. Return ONLY valid JSON matching the schema shown below. No commentary before or after.
 2. Produce no more than ${Math.min(params.slideCount, 10)} slides TOTAL. Never exceed 10. Produce fewer if the content doesn't need more.
-3. Slide 1 is ALWAYS type "hook-opener". It is a COVER slide: one punchy headline + optional subtitle. Do NOT include items or footer on slide 1 — just the hook. Rendered at 132px across 920px of width, so roughly 13-14 characters fit per line. MAX 3 LINES of headline (≤40 characters, ≤7 words) so there is always clear air between the hook and the profile row at the bottom. Write the headline as a natural, complete idea ("6 rural markets I'd buy" is better than "6 Rural Markets"). Treat slide 1 like a magazine cover, not a paragraph. No single word longer than 12 characters.
+3. Slide 1 is ALWAYS type "hook-opener". COVER slide: one punchy headline + optional subtitle. No items or footer. Rendered at 132px on a 920px-wide canvas — roughly 11-13 characters fit per line, so a TIGHT 3-line headline = ~32-38 characters total. TARGET 32-38 chars (5-7 words) to guarantee clean 3-line wrapping; treat 40 chars as a hard cap, not a goal. No single word over 12 characters (longer words orphan a line and break the layout).
+   FIT VERIFICATION before you output: imagine the headline laid out at 132pt across the canvas. Each line fits ~12 characters. Mentally split your headline into the 3 lines it would wrap to. Are they balanced? Does any line have a single short word stranded by itself? Does any word need to break across lines? If yes, rewrite — pick shorter synonyms, drop filler words ("the", "a", "is"), or find a different angle that compresses cleaner. If you can't make a hook fit + hit, the right move is a DIFFERENT angle, not a longer hook.
+   Examples that fit cleanly:
+     "$25K down. $70K a year."   (22 chars / 6 words / 2 short lines)
+     "What I learned hosting Airbnb"   (29 chars / 5 words)
+     "6 markets I'd buy in 2026"   (25 chars / 6 words)
+     "How W2 earners pay zero tax"   (27 chars / 6 words)
+   Treat slide 1 like a magazine cover, not a paragraph. Every word must earn its place — no filler.
 4. Final slide is always type "cta" — DM keyword, free resource, or clear next step.
 5. Compress mercilessly. Each slide must be SCANNABLE in under 4 seconds.
 6. Per-slide budgets (HARD LIMITS — never exceed):
@@ -47,8 +54,8 @@ CARDINAL RULES — follow without exception:
    - Bullets per slide: max ${params.maxBullets}.
    - Each bullet: under ~${params.maxCharsBullet} characters AND must fit on ONE LINE when rendered at 48px on a 920px-wide canvas. Roughly: if it's more than 6-7 words, it is too long.
    - Headlines (body slides): under ~60 characters. Under ~8 words.
-   - Cover headline (slide 1): ≤40 characters, ≤7 words, max 3 lines when rendered, no individual word longer than 12 characters.
-   - Cover subtitle (slide 1): optional; ≤60 characters, 1 line.
+   - Cover headline (slide 1): TARGET 32-38 chars, 5-7 words, 3 balanced lines when rendered. Hard cap 40 chars / 7 words / 3 lines. No individual word over 12 chars. See rule 3 for the line-fit verification step.
+   - Cover subtitle (slide 1): optional; TARGET ≤45 chars to guarantee single-line fit at 48pt across the 920px canvas (60 chars is a hard cap and risks 2-line wrap). Must add NEW VALUE — a sharper detail, a specific number, a date, a concrete payoff. Do NOT just paraphrase the headline. If the subtitle is just rephrasing, drop it.
    - Paragraphs: under ~20 words each. Prefer 2-3 short paragraphs over one long one.
 7. NEVER flood a slide. If a point needs more space, split it into another slide or cut the word count.
 8. If the source copy is long, REWRITE — do not paraphrase. Your job is to cut, not to preserve.
