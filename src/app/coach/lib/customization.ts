@@ -40,7 +40,7 @@ export function loadCustomPillars(): Pillar[] | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    return parsed.filter(
+    const valid = parsed.filter(
       (p): p is Pillar =>
         p &&
         typeof p.id === "string" &&
@@ -49,9 +49,55 @@ export function loadCustomPillars(): Pillar[] | null {
         typeof p.description === "string" &&
         Array.isArray(p.topics),
     );
+    // Sanitize: strip any phantom topics from older saves. If a pillar's
+    // topic bank empties out as a result, fall back to that pillar's
+    // default seed topics so the user never sees a blank dropdown.
+    const { sanitized, changed } = sanitizePillarTopics(valid);
+    if (changed) saveCustomPillars(sanitized);
+    return sanitized;
   } catch {
     return null;
   }
+}
+
+// Topic strings the user explicitly told us were stale and shouldn't
+// appear anywhere again. Matched case-insensitively as a substring on
+// each pillar topic. Adding new entries here scrubs them on next load
+// (idempotent — if there's nothing to remove, the saved data isn't
+// touched).
+const FORBIDDEN_TOPIC_SUBSTRINGS = ["detroit"];
+
+function isForbidden(topic: string): boolean {
+  const t = topic.toLowerCase();
+  return FORBIDDEN_TOPIC_SUBSTRINGS.some((s) => t.includes(s));
+}
+
+// Strips forbidden topics. If a pillar ends up with zero topics after
+// the scrub, its bank gets restored from the matching PILLARS seed
+// (or just emptied if no seed match — should never happen for the
+// default pillar ids).
+function sanitizePillarTopics(
+  pillars: Pillar[],
+): { sanitized: Pillar[]; changed: boolean } {
+  let changed = false;
+  const sanitized = pillars.map((p) => {
+    const filtered = p.topics.filter((t) => {
+      const bad = isForbidden(t);
+      if (bad) changed = true;
+      return !bad;
+    });
+    if (filtered.length === 0 && p.topics.length > 0) {
+      const seed = PILLARS.find((s) => s.id === p.id);
+      if (seed) {
+        return { ...p, topics: [...seed.topics] };
+      }
+    }
+    if (filtered.length !== p.topics.length) {
+      return { ...p, topics: filtered };
+    }
+    return p;
+  });
+  return { sanitized, changed };
 }
 
 export function saveCustomPillars(pillars: Pillar[] | null): void {
