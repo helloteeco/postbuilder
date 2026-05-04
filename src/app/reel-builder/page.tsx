@@ -329,7 +329,7 @@ export default function ReelBuilderPage() {
       </header>
 
       <WelcomeBanner
-        storageKey="welcome_reel_builder_v1"
+        storageKey="welcome_reel_builder_v2"
         title="👋 Welcome to Reel Builder"
         steps={[
           {

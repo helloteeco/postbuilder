@@ -257,7 +257,7 @@ export default function CoachDashboard() {
       </div>
 
       <WelcomeBanner
-        storageKey="welcome_coach_v1"
+        storageKey="welcome_coach_v2"
         title="👋 Welcome to Coach Mode"
         steps={[
           {

@@ -578,7 +578,7 @@ export default function PostBuilder() {
 
       <div className="mb-4">
         <WelcomeBanner
-          storageKey="welcome_post_builder_v1"
+          storageKey="welcome_post_builder_v2"
           title="👋 Welcome to Post Builder"
           steps={[
             {
