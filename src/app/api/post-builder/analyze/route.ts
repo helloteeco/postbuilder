@@ -60,7 +60,14 @@ CARDINAL RULES — follow without exception:
    - CTA slide (final slide)
 10. Inline bold via **double asterisks** is REQUIRED on every slide. Pick 2-4 high-impact words or short phrases per slide and wrap them in ** ** to stop the scroll. On the cover (slide 1), bold the 1-3 words that are the whole point of the post (e.g. **$500K**, **hidden**, **actually buy**, **Passive Income**, **Overrated**). Never bold a whole sentence; bold the nouns and numbers inside it. IMPORTANT: Only ever use DOUBLE asterisks (**like this**) — never use single asterisks (*like this*) or any other markdown. If you want emphasis, always use ** **.
 11. Numbers should feel specific, not rounded ($75,940 > "about $76K"). If the source gives a vague number, keep it vague — do not fabricate.
-12. NUMBERING / ENUMERATION CONSISTENCY (read carefully — this is the most common failure mode):
+12. NO INSIDER JARGON IN THE COVER HEADLINE OR SUBTITLE (slide 1). The cover is for an outsider scrolling past who has zero context on the niche. They should understand instantly without Googling. Specifically:
+    a. Banned in slide 1 headline + subtitle: niche acronyms (STR, ADR, RevPAR, OTA, PMS, ARV, BRRRR, COC, KPI, MQL, CAC, LTV, EBITDA, ROAS, NPS, etc.), industry shorthand ("the loophole", "1031", "buy box", "cap rate", "the stack") unless the term is universally known to a non-specialist.
+    b. Spelling the term out in parentheses ("STR (short term rental)") is NOT a fix — it eats valuable hook space. Rephrase the hook so the term isn't needed at all.
+    c. Prefer everyday brand names (Airbnb, Amazon, Google, Uber) when they communicate the same idea as a niche term ("Airbnb" instead of "STR").
+    d. Prefer plain English (rental, guest, booking, customer, deal, profit) over insider words (unit, ADR, occupancy, lead, MRR).
+    e. Bad: "8 things I learned starting my STR." Good: "8 things I learned hosting my first Airbnb." or "8 lessons from my first rental."
+    f. THE BODY SLIDES (sections 2-9) MAY use precise industry terms — by then the reader has chosen to be in. Body slides explain; covers attract.
+13. NUMBERING / ENUMERATION CONSISTENCY (read carefully — this is the most common failure mode):
     a. Never write a numbered item — "5.", "Step 5", "Tier 5", "#5", "Rule 5", etc. — unless items 1 through 4 of that exact same series have already appeared earlier in the carousel, in order. No orphan numbers. No skipping.
     b. If the cover headline promises a count ("6 rural markets I'd buy", "5 rules", "7 mistakes"), the body slides must deliver EXACTLY that many items, numbered 1 through N in order, no gaps, no extras. If you can't deliver the promised count cleanly within the slide budget, lower the number on the cover to match.
     c. Cross-slide numbering is the JOB of the "market-detail" slide type — its \`rank\` field is the sequence number. When you have a list of N ranked items spanning multiple slides, use one "market-detail" slide per item with rank: 1, rank: 2, ... rank: N consecutively. Do NOT mix in freeform "5." prefixes inside other slide types' headings or paragraphs to extend the count.

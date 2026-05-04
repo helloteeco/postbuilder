@@ -53,11 +53,13 @@ OUTPUT: 3 reel variations. Each variation contains:
    - Same hook formula style as the original section 1
    - Different angle from the other 2 variations
    - REQUIRED: wrap 1-2 high-impact words in **double asterisks** so they render in the cover's accent color. Pick the words that ARE the hook — dollar amounts, percentages, specific numbers, surprise nouns, emotional triggers ($250K, hidden, never, free, secret, 16.4%, etc.). Never bold function words like "the", "is", "of". A headline with ZERO bolded words is invalid output.
+   - REQUIRED: NO INSIDER JARGON. Write the headline so a viewer with zero context on the niche understands it instantly. Banned: niche acronyms (STR, ADR, RevPAR, OTA, PMS, ARV, BRRRR, COC, KPI, MQL, CAC, LTV, EBITDA, ROAS, NPS, etc.), industry shorthand ("the loophole", "1031", "buy box", "cap rate", "the stack") unless universally known to a non-specialist. Spelling the term in parentheses ("STR (short term rental)") is NOT a fix — it eats valuable hook space. Rephrase entirely. Prefer everyday brand names (Airbnb, Amazon, Google, Uber) and plain English (rental, guest, booking, customer, deal, profit) over insider terms. Bad: "8 things I learned starting my STR." Good: "8 things I learned hosting my first Airbnb." or "8 lessons from my first rental."
 
 2. An optional subtitle
    - Maximum 60 characters
    - Reinforces the headline
    - REQUIRED: if the subtitle has 1-2 standout words (numbers, dates, dollar amounts, key nouns), wrap them in **double asterisks** for accent-color rendering. Same selection rule as the headline. Skip the bolding if the subtitle is short and there's no obvious standout — better to have no bold than a forced one.
+   - REQUIRED: NO INSIDER JARGON. Same rule as the headline — write for an outsider scrolling past. The CAPTION (below) may use precise industry terms once the reader has chosen to dig in, but the cover (headline + subtitle) is for attraction, not explanation.
 
 3. A long-form caption (1,400-2,000 characters, hard cap 2,200)
    - Opens with a hook line that matches the on-screen reel headline (or paraphrases it tightly)
