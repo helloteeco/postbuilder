@@ -57,12 +57,30 @@ export const COVER_PADDING_X = 80;
 // uses to keep the headline from crashing into the profile row.
 export const COVER_HOOK_MAX_HEIGHT = 510;
 
-// "See description ↓" lives in the top empty band (y=0 to y=285).
-// Single line, with the chevron immediately below — no oceanic gap.
-// Vertically tucked above the cover so the IG reel-UI top overlay
-// (~y=0 to y=80) doesn't hide it.
-export const SEE_DESC_TEXT_Y = 95;
-export const SEE_DESC_CHEVRON_Y = 175;
+// "See description ↓" sits BELOW the profile row, inside the cover's
+// bottom-padding zone. Three reasons this is the right spot:
+//
+//  1. Bird's-eye-view scannability on the IG profile grid. The grid
+//     center-crops 9:16 reels to 4:5 (y=285 to y=1635), which IS
+//     the embedded cover. An indicator below the profile row shows
+//     up clearly in the grid thumbnail and visually differentiates
+//     reels from carousel posts (which have nothing below the face).
+//
+//  2. Doesn't fight the headline/subtitle hierarchy. Putting it
+//     above the title or in the title block competed for attention
+//     and made the cover feel cluttered.
+//
+//  3. Sits above where IG's bottom UI overlays the reel when
+//     playing (caption peek + music + buttons typically start
+//     around y=1500). At y=1290-1450, it's visible during playback
+//     and doesn't conflict with IG's chrome.
+//
+// Profile row bottom is at ~y=1255 (cover y=970+140). 35px gap, then
+// "See description" text, tight 12px gap, then chevron — total
+// indicator block ~190px tall, ending at ~y=1480, well above IG's
+// bottom-UI start.
+export const SEE_DESC_TEXT_Y = 1290;
+export const SEE_DESC_CHEVRON_Y = 1370;
 
 // ── Background palettes ────────────────────────────────────────────
 // Mirror Post Builder's full 7-palette set so the reel's bg picker

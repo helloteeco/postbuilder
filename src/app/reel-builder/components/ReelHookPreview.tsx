@@ -5,14 +5,18 @@
 // Post Builder cover layout — same 240/80/380 padding, same 132pt
 // headline, same 48pt subtitle, same compact profile row. That way
 // the reel's profile-grid thumbnail (which IG center-crops to 4:5 or
-// 1:1) is pixel-identical to a Post Builder feed post.
+// 1:1) shows the headline + face in the same pixels as a Post
+// Builder feed post.
+//
+// The "See description ↓" indicator sits BELOW the profile row in
+// the cover's bottom-padding zone (y=1290-1480). That's the spot
+// IG's grid view shows it (cropped inside the embedded cover) and
+// where it's still visible during playback (above IG's bottom-UI
+// overlay starting around y=1500).
 //
 //   y=0
-//   ┌────────────────────────┐  top empty band (285px)
-//   │                        │
-//   │   See description ↓    │  y=95   ← single line, 64pt bold
-//   │   ↓                    │  y=175  ← chevron, 96pt accent (tight)
-//   │                        │
+//   ┌────────────────────────┐  top empty band (285px) — covered by
+//   │                        │  IG's reel-UI top overlay during play
 //   y=285
 //   ┌────────────────────────┐  EMBEDDED 1080×1350 PB COVER
 //   │ (240px top padding)    │  y=285-525
@@ -21,10 +25,12 @@
 //   │   ...                  │
 //   │ [avatar] Name ✓        │  y=1115 ← matches PB feed-post pixel
 //   │          @handle       │
-//   │ (380px bottom padding) │  y=1255-1635
+//   │                        │
+//   │ See description        │  y=1290 ← grid-visible cue, sized
+//   │       ↓                │  y=1370   subordinate to headline
+//   │ (cover bottom padding) │
 //   y=1635
-//   ┌────────────────────────┐  bottom empty band (285px)
-//   │                        │  IG UI overlays this when reel plays
+//   ┌────────────────────────┐  bottom empty band — IG UI overlay
 //   y=1920
 //
 // We deliberately re-implement the renderer instead of importing
@@ -191,39 +197,6 @@ const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPrevi
         transformOrigin: "top left",
       }}
     >
-      {/* TOP BAND — "See description ↓" + chevron, single line each */}
-      <div
-        style={{
-          position: "absolute",
-          top: SEE_DESC_TEXT_Y,
-          left: 0,
-          right: 0,
-          textAlign: "center",
-          fontSize: 64,
-          fontWeight: 700,
-          letterSpacing: 0.5,
-          color: palette.fg,
-          lineHeight: 1,
-        }}
-      >
-        See description ↓
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          top: SEE_DESC_CHEVRON_Y,
-          left: 0,
-          right: 0,
-          textAlign: "center",
-          fontSize: 96,
-          fontWeight: 900,
-          color: palette.accent,
-          lineHeight: 1,
-        }}
-      >
-        ↓
-      </div>
-
       {/* EMBEDDED 1080×1350 POST BUILDER COVER — identical layout to
           CarouselSlide.tsx's hook-opener: padding 240/80/380, flex
           column space-between, hook block at top, profile at bottom. */}
@@ -267,6 +240,43 @@ const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPrevi
           )}
         </div>
         <ProfileRowCompact profile={profile} fg={palette.fg} muted={palette.muted} />
+      </div>
+
+      {/* "See description ↓" — sits below the profile row inside the
+          cover's bottom-padding zone. Smaller and slightly muted so it
+          reads as a secondary "this is a video" cue, not competing
+          with the headline. Visible on the IG profile-grid thumbnail. */}
+      <div
+        style={{
+          position: "absolute",
+          top: SEE_DESC_TEXT_Y,
+          left: 0,
+          right: 0,
+          textAlign: "center",
+          fontSize: 52,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          color: palette.fg,
+          opacity: 0.85,
+          lineHeight: 1,
+        }}
+      >
+        See description ↓
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          top: SEE_DESC_CHEVRON_Y,
+          left: 0,
+          right: 0,
+          textAlign: "center",
+          fontSize: 76,
+          fontWeight: 900,
+          color: palette.accent,
+          lineHeight: 1,
+        }}
+      >
+        ↓
       </div>
     </div>
   );
