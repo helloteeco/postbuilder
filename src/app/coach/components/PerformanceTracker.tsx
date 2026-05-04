@@ -64,6 +64,7 @@ import LoggingReminder from "@/app/coach/components/LoggingReminder";
 import TopPostBadge from "@/app/coach/components/TopPostBadge";
 import SlideCaptureModal from "@/app/coach/components/SlideCaptureModal";
 import TopPostMode from "@/app/coach/components/TopPostMode";
+import RemixPromptModal from "@/app/coach/components/RemixPromptModal";
 
 // ── Form types ─────────────────────────────────────────────────────────
 
@@ -246,6 +247,8 @@ export default function PerformanceTracker() {
   // exclusive with topPostId — the modal closes Top Post Mode while
   // open so we don't stack overlays.
   const [slideCaptureFor, setSlideCaptureFor] = useState<string | null>(null);
+  // ID of the post the user is remixing (Claude.ai prompt modal).
+  const [remixingPostId, setRemixingPostId] = useState<string | null>(null);
   // Bumped on dismissal so LoggingReminder re-evaluates after a skip.
   const [reminderRev, setReminderRev] = useState(0);
   // Drafts handed off from the Post Builder, awaiting log. Mount load +
@@ -714,6 +717,7 @@ export default function PerformanceTracker() {
                 onLogUpdate={() => startUpdateDraft(p)}
                 onEdit={() => startEditDraft(p)}
                 onAddSlides={() => setSlideCaptureFor(p.id)}
+                onRemix={() => setRemixingPostId(p.id)}
               />
             ))}
           </ul>
@@ -762,6 +766,16 @@ export default function PerformanceTracker() {
           setPosts(loadLoggedPosts());
         }}
       />
+
+      <RemixPromptModal
+        open={remixingPostId !== null}
+        post={
+          remixingPostId
+            ? posts.find((p) => p.id === remixingPostId) ?? null
+            : null
+        }
+        onClose={() => setRemixingPostId(null)}
+      />
     </section>
   );
 }
@@ -777,6 +791,7 @@ interface PostRowProps {
   onLogUpdate: () => void;
   onEdit: () => void;
   onAddSlides: () => void;
+  onRemix: () => void;
 }
 
 function PostRow({
@@ -788,6 +803,7 @@ function PostRow({
   onLogUpdate,
   onEdit,
   onAddSlides,
+  onRemix,
 }: PostRowProps) {
   const detectionSnap = getDetectionSnapshot(post);
   // Use the detection snapshot for the rate pills — that's what
@@ -921,6 +937,18 @@ function PostRow({
         >
           Edit
         </button>
+        {(post.isWinner || flags !== null) &&
+          post.slides &&
+          post.slides.length > 0 && (
+            <button
+              type="button"
+              onClick={onRemix}
+              className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+              title="Generate a Claude.ai prompt that produces 5 cover-hook variations of this post — body slides + CTA stay locked"
+            >
+              ↻ Remix
+            </button>
+          )}
         {display && (
           <button
             type="button"
