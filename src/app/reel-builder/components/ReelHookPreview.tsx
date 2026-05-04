@@ -8,12 +8,13 @@
 // 1:1) shows the headline + face in the same pixels as a Post Builder
 // feed post.
 //
-// "See description ↓" + chevron sit BELOW the profile row in the
-// cover's bottom-padding zone (y=1290-1480), LEFT-ALIGNED at x=80
-// to match the headline / subtitle / profile column. Centered felt
-// floaty against the rest of the left-aligned content; left-aligning
-// keeps the visual axis consistent while still letting the chevron
-// pop in the accent color.
+// "See description ↓" sits BELOW the profile row in the cover's
+// bottom-padding zone (y=1310). Single clean line, left-aligned at
+// x=80 to match the headline column. The arrow is inline with the
+// text (accent color, same size) — no separate giant chevron below.
+// The previous two-line stack of white text + 76pt accent chevron
+// felt tacky and competed with the headline; one line reads as a
+// quiet, native-feeling affordance.
 //
 //   y=0
 //   ┌────────────────────────┐  top empty band — IG reel-UI overlay
@@ -25,8 +26,7 @@
 //   │ [avatar] Name ✓        │  y=1115
 //   │          @handle       │
 //   │                        │
-//   │ See description ↓      │  y=1290 left-aligned, accent chevron
-//   │ ↓                      │  y=1370
+//   │ See description ↓      │  y=1310 single line, ↓ inline accent
 //   y=1635
 //   ┌────────────────────────┐  bottom band — IG bottom-UI overlay
 //   y=1920
@@ -46,7 +46,6 @@ import {
   REEL_BG_PALETTES,
   REEL_HEIGHT,
   REEL_WIDTH,
-  SEE_DESC_CHEVRON_Y,
   SEE_DESC_TEXT_Y,
   type ReelBg,
 } from "@/app/reel-builder/lib/reelTemplate";
@@ -244,10 +243,12 @@ const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPrevi
         <ProfileRowCompact profile={profile} fg={palette.fg} muted={palette.muted} />
       </div>
 
-      {/* "See description ↓" — left-aligned at x=80 (matches the
-          headline column) so it doesn't feel floaty against the rest
-          of the left-aligned cover content. Sized down + 0.85 opacity
-          so it reads as a secondary "video has more below" cue. */}
+      {/* "See description ↓" — single clean line, left-aligned at
+          x=80 to match the headline column. The arrow is inline with
+          the text (same size, accent color) instead of a separate
+          giant chevron below; that two-line stack felt tacky and
+          competed visually with the headline. Now reads as a quiet,
+          native-feeling affordance. */}
       <div
         style={{
           position: "absolute",
@@ -255,30 +256,18 @@ const ReelHookPreview = forwardRef<HTMLDivElement, Props>(function ReelHookPrevi
           left: COVER_PADDING_X,
           right: COVER_PADDING_X,
           textAlign: "left",
-          fontSize: 52,
-          fontWeight: 700,
-          letterSpacing: 0.5,
+          fontSize: 56,
+          fontWeight: 600,
+          letterSpacing: 0.3,
           color: palette.fg,
-          opacity: 0.85,
+          opacity: 0.82,
           lineHeight: 1,
         }}
       >
-        See description ↓
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          top: SEE_DESC_CHEVRON_Y,
-          left: COVER_PADDING_X,
-          right: COVER_PADDING_X,
-          textAlign: "left",
-          fontSize: 76,
-          fontWeight: 900,
-          color: palette.accent,
-          lineHeight: 1,
-        }}
-      >
-        ↓
+        See description{" "}
+        <span style={{ color: palette.accent, fontWeight: 800, opacity: 1 }}>
+          ↓
+        </span>
       </div>
     </div>
   );

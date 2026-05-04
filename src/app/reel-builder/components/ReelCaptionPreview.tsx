@@ -1,9 +1,9 @@
 "use client";
 
-// Caption block under each reel preview. Collapsible (collapsed shows
-// the first 100 chars + "…"). Expanded reveals an EDITABLE textarea
-// so the user can tweak the generated caption inline before copying.
-// Live char-counter color-codes against the IG hard cap.
+// Caption block under each reel preview. Always-visible editable
+// textarea (no collapse — the caption is the primary thing the user
+// wants to read and tweak, hiding it behind a toggle was easy to
+// miss). Live char-counter color-codes against the IG hard cap.
 
 import { useState } from "react";
 import {
@@ -23,11 +23,8 @@ function counterColor(count: number): string {
 }
 
 export default function ReelCaptionPreview({ caption, onChange }: Props) {
-  const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const count = caption.length;
-  const preview =
-    caption.length > 100 ? caption.slice(0, 100).trimEnd() + "…" : caption;
 
   async function copyCaption() {
     try {
@@ -35,20 +32,16 @@ export default function ReelCaptionPreview({ caption, onChange }: Props) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // ignore — caption is visible, user can manual-copy
+      // ignore
     }
   }
 
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="text-xs font-semibold uppercase tracking-wider text-gray-700 hover:text-gray-900"
-        >
-          Caption {expanded ? "▴" : "▾"}
-        </button>
+        <span className="text-xs font-semibold uppercase tracking-wider text-gray-700">
+          Caption
+        </span>
         <div className="flex items-center gap-2">
           <span
             className={`rounded px-2 py-0.5 text-[11px] font-medium ${counterColor(count)}`}
@@ -69,16 +62,12 @@ export default function ReelCaptionPreview({ caption, onChange }: Props) {
           </button>
         </div>
       </div>
-      {expanded ? (
-        <textarea
-          value={caption}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-64 w-full resize-y rounded border border-gray-300 bg-white p-2 font-mono text-xs text-gray-800"
-          placeholder="Your caption — editable. Asterisks like **word** stay literal in the caption (Instagram doesn't render them); use them only on the cover headline / subtitle if you want bold highlights there."
-        />
-      ) : (
-        <div className="text-xs leading-relaxed text-gray-600">{preview}</div>
-      )}
+      <textarea
+        value={caption}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-72 w-full resize-y rounded border border-gray-300 bg-white p-2 font-mono text-xs leading-relaxed text-gray-800"
+        placeholder="Your caption — editable. Each blank-line section becomes one body slide when you Send to tracker; Coach Mode runs structural analysis on the result."
+      />
     </div>
   );
 }

@@ -52,10 +52,12 @@ OUTPUT: 3 reel variations. Each variation contains:
    - No individual word over 12 characters
    - Same hook formula style as the original section 1
    - Different angle from the other 2 variations
+   - REQUIRED: wrap 1-2 high-impact words in **double asterisks** so they render in the cover's accent color. Pick the words that ARE the hook — dollar amounts, percentages, specific numbers, surprise nouns, emotional triggers ($250K, hidden, never, free, secret, 16.4%, etc.). Never bold function words like "the", "is", "of". A headline with ZERO bolded words is invalid output.
 
 2. An optional subtitle
    - Maximum 60 characters
    - Reinforces the headline
+   - REQUIRED: if the subtitle has 1-2 standout words (numbers, dates, dollar amounts, key nouns), wrap them in **double asterisks** for accent-color rendering. Same selection rule as the headline. Skip the bolding if the subtitle is short and there's no obvious standout — better to have no bold than a forced one.
 
 3. A long-form caption (1,400-2,000 characters, hard cap 2,200)
    - Opens with a hook line that matches the on-screen reel headline (or paraphrases it tightly)
@@ -70,7 +72,7 @@ VOICE RULES (locked):
 - Confident, direct, no-fluff tone
 - No em dashes (use periods, commas, colons)
 - No emojis, no hashtags
-- No bold/asterisk markdown — Instagram doesn't render it, so don't include ** in the caption (it's fine in the headline since the reel cover renders it visually)
+- The headline + subtitle USE ** ** for bolding (rendered in accent color on the cover). The CAPTION does NOT use ** ** — Instagram doesn't render markdown in captions, so plain text only there.
 - Short paragraphs and line breaks between list items for mobile readability
 - Specific numbers, never rounded
 - Stay under 2,200 characters total in the caption
@@ -83,9 +85,9 @@ OUTPUT SHAPE — return ONLY this JSON, no commentary, no markdown fences:
   "variations": [
     {
       "angle": "counter-intuitive" | "list-promise" | "specific-number" | "news-driven" | "question",
-      "hookHeadline": "string",
-      "hookSubtitle": "string (use empty string if no subtitle)",
-      "caption": "string"
+      "hookHeadline": "string with **bold** spans on 1-2 high-impact words",
+      "hookSubtitle": "string (use empty string if no subtitle), bold the standout word(s) if any",
+      "caption": "string with NO ** ** markdown"
     },
     { ... },
     { ... }

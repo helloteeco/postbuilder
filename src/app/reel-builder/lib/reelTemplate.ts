@@ -58,29 +58,20 @@ export const COVER_PADDING_X = 80;
 export const COVER_HOOK_MAX_HEIGHT = 510;
 
 // "See description ↓" sits BELOW the profile row, inside the cover's
-// bottom-padding zone. Three reasons this is the right spot:
+// bottom-padding zone. Single clean line with the arrow integrated
+// into the text — no second giant chevron underneath. The two-line
+// "white text + bigger accent chevron" stack felt tacky and visually
+// heavy; one line reads as a quiet, native-feeling affordance.
 //
-//  1. Bird's-eye-view scannability on the IG profile grid. The grid
-//     center-crops 9:16 reels to 4:5 (y=285 to y=1635), which IS
-//     the embedded cover. An indicator below the profile row shows
-//     up clearly in the grid thumbnail and visually differentiates
-//     reels from carousel posts (which have nothing below the face).
-//
-//  2. Doesn't fight the headline/subtitle hierarchy. Putting it
-//     above the title or in the title block competed for attention
-//     and made the cover feel cluttered.
-//
-//  3. Sits above where IG's bottom UI overlays the reel when
-//     playing (caption peek + music + buttons typically start
-//     around y=1500). At y=1290-1450, it's visible during playback
-//     and doesn't conflict with IG's chrome.
-//
-// Profile row bottom is at ~y=1255 (cover y=970+140). 35px gap, then
-// "See description" text, tight 12px gap, then chevron — total
-// indicator block ~190px tall, ending at ~y=1480, well above IG's
-// bottom-UI start.
-export const SEE_DESC_TEXT_Y = 1290;
-export const SEE_DESC_CHEVRON_Y = 1370;
+// Position rationale:
+//   • Visible inside IG's 4:5 profile-grid crop (y=285-1635) so it
+//     reads as a bird's-eye-view marker for "this post is a reel"
+//     when scrolling the user's grid.
+//   • Above where IG's bottom-UI overlay starts (~y=1500) so it
+//     stays readable during playback.
+//   • Doesn't fight the headline / subtitle / profile hierarchy at
+//     the top of the cover.
+export const SEE_DESC_TEXT_Y = 1310;
 
 // ── Background palettes ────────────────────────────────────────────
 // Mirror Post Builder's full 7-palette set so the reel's bg picker
