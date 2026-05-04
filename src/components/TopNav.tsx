@@ -1,5 +1,5 @@
-// Top navigation bar shown above every page. Two links: Post Builder
-// (the existing /post-builder feature) and Coach Mode (/coach).
+// Top navigation bar shown above every page. Three links: Post Builder
+// (/post-builder), Reel Builder (/reel-builder), Coach Mode (/coach).
 // The active route gets a dark underline.
 
 "use client";
@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
   { href: "/post-builder", label: "Post Builder" },
+  { href: "/reel-builder", label: "Reel Builder" },
   { href: "/coach", label: "Coach Mode" },
 ] as const;
 
