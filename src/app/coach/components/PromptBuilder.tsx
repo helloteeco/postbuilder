@@ -31,6 +31,7 @@ import {
   getDetectionSnapshot,
   normalizeMetricsTo48h,
 } from "@/app/coach/lib/timingHelpers";
+import { dailyStoriesForPillar, type Story } from "@/app/coach/lib/storyBank";
 import type { SelectedSlot } from "./CoachDashboard";
 
 interface CtaOption {
@@ -144,6 +145,23 @@ MIRROR its structural pattern in the new post:
 ${slideText}`;
 }
 
+// Format up to N stories from the user's Story Bank into a labelled
+// block Claude can pull anchor material from. Returns an empty string
+// when the bank has nothing for the active pillar — in that case the
+// downstream prompt skips the section entirely instead of telling
+// Claude "(no stories yet)" which dilutes the rest of the prompt.
+function storiesBlock(stories: Story[]): string {
+  if (stories.length === 0) return "";
+  const lines = stories
+    .map((s, i) => `${i + 1}. ${s.title}\n${s.body}`)
+    .join("\n\n");
+  return `PERSONAL STORIES YOU CAN DRAW FROM (real anecdotes from this creator's life — names, places, dollar amounts, moments, all real). Weave at least one of these naturally into the post where it fits the topic. Use the specific people, places, and numbers verbatim — don't paraphrase them away. If none truly fit the current topic, skip them rather than force-fit:
+
+${lines}
+
+`;
+}
+
 function buildPrompt({
   topic,
   pillarName,
@@ -152,6 +170,7 @@ function buildPrompt({
   ctaKeyword,
   ctaPromise,
   learning,
+  stories,
   todayDate,
 }: {
   topic: string;
@@ -161,6 +180,9 @@ function buildPrompt({
   ctaKeyword: string;
   ctaPromise: string;
   learning: LearningContext;
+  // Up to 2 stories from the user's Story Bank tagged to the active
+  // pillar. Empty array if the user hasn't deposited any yet.
+  stories: Story[];
   todayDate: Date;
 }): string {
   const { audience, tone, readingLevel } = LOCKED_POST_BUILDER_SETTINGS;
@@ -209,7 +231,7 @@ READING LEVEL: ${readingLevel}. Short, plain words. No jargon. No fluff.
 
 CTA: DM "${ctaKeyword}" to get ${ctaPromise}.
 
-WHAT'S WORKED FOR THIS ACCOUNT (real performance data):
+${storiesBlock(stories)}WHAT'S WORKED FOR THIS ACCOUNT (real performance data):
 ${learningBlock}
 
 STRUCTURE:
@@ -298,6 +320,15 @@ export default function PromptBuilder({ selectedSlot }: PromptBuilderProps = {})
 
   const learning = useMemo(() => pickLearningContext(loggedPosts), [loggedPosts]);
 
+  // Pull up to 2 stories tagged to the active pillar. Deterministic
+  // by date+pillar so the same suggestions surface for the whole day
+  // — switching slots reshuffles when the pillar changes, switching
+  // hooks doesn't.
+  const pillarStories = useMemo(
+    () => dailyStoriesForPillar(activeDate, activePillar.id, 2),
+    [activeDate, activePillar.id],
+  );
+
   const selectedHook =
     HOOK_FORMULAS.find((h) => h.id === hookId) ?? activeHook;
   const finalTopic = topic === "__custom__" ? customTopic : topic;
@@ -311,6 +342,7 @@ export default function PromptBuilder({ selectedSlot }: PromptBuilderProps = {})
     ctaKeyword,
     ctaPromise,
     learning,
+    stories: pillarStories,
     todayDate: activeDate,
   });
 

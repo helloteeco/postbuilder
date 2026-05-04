@@ -39,6 +39,7 @@ const SCOPED_SUFFIXES = [
   "posts",
   "locked_strategy",
   "dismissed_reminders",
+  "story_bank",
 ] as const;
 
 function isBrowser(): boolean {

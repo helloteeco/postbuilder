@@ -12,6 +12,7 @@ import PerformanceTracker from "@/app/coach/components/PerformanceTracker";
 import PillarReference from "@/app/coach/components/PillarReference";
 import PillarsScheduleEditor from "@/app/coach/components/PillarsScheduleEditor";
 import PromptBuilder from "@/app/coach/components/PromptBuilder";
+import StoryBank from "@/app/coach/components/StoryBank";
 import TodaysPlan from "@/app/coach/components/TodaysPlan";
 import WeekCalendar from "@/app/coach/components/WeekCalendar";
 import type { Slot } from "@/app/coach/lib/strategy";
@@ -285,6 +286,10 @@ export default function CoachDashboard() {
         onSelectSlot={handleSelectSlot}
       />
       <PerformanceTracker key={`pt-${revision}`} />
+      <StoryBank
+        key={`sb-${revision}`}
+        onChange={() => setRevision((v) => v + 1)}
+      />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <HookFormulas />
         <PillarReference key={`pr-${revision}`} />
