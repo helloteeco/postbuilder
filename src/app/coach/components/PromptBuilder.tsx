@@ -55,6 +55,16 @@ function compositeScore(p: CoachPost): number {
   return saveRate(p) / SAVE_RATE_TARGET + (shareRate(p) / SHARE_RATE_TARGET) * 2.5;
 }
 
+// Bonus added to a post's composite score when the user explicitly
+// marked it as a winner in Performance Tracker. The user's flag is a
+// strong signal — they saw something work that pure metrics might
+// miss (e.g. high-quality DMs, niche-specific resonance, conversion
+// downstream) — so it should carry weight in the learning block.
+// +2.0 is roughly equal to a post that hits its share-rate target
+// exactly, so a flagged + mediocre post ranks alongside an unflagged
+// strong performer; a flagged + strong post ranks firmly at the top.
+const WINNER_FLAG_BOOST = 2.0;
+
 // Score a LoggedPost using its detection snapshot's normalized metrics
 // — same fairness rule as the Top Post Mode badges. Returns null when
 // the post can't be evaluated (no settled snapshot yet).
@@ -72,7 +82,9 @@ function scorePost(lp: LoggedPost): ScoredPost | null {
     metrics: normalizeMetricsTo48h(snap.metrics, snap.hoursAfterPosting),
   };
   const cv = toCoachPost(lp, normalized);
-  return { cv, lp, score: compositeScore(cv) };
+  const base = compositeScore(cv);
+  const boost = lp.isWinner ? WINNER_FLAG_BOOST : 0;
+  return { cv, lp, score: base + boost };
 }
 
 interface LearningContext {
