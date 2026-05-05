@@ -208,26 +208,46 @@ function emptyNewDraft(pillars: Pillar[]): NewPostDraft {
 }
 
 function snapshotsBadgeForPost(post: LoggedPost): string {
-  // The display badge is intentionally looser than the strict detection
-  // window in timingHelpers.ts. Two reasons:
-  //   1. The old has48 ([36, 72]) + has7d ([168, ∞)) windows left a dead
-  //      zone at 3-6 days (72-168h) where a snapshot got NEITHER badge
-  //      and the code fell through to "preliminary" — wildly wrong for
-  //      a post that's 5 days old.
-  //   2. hoursAfterPosting is stored as Math.round(hours), so a "posted
-  //      exactly 7 days ago" entry can land at 167h and miss the strict
-  //      168h boundary.
-  // The strict windows used by getDetectionSnapshot / outlier detection
-  // are unchanged — this is just visual labeling.
+  // The display badge reflects BOTH what data the user has logged AND
+  // how old the post is right now. Without the current-age check, a
+  // post logged early stayed labeled "preliminary" indefinitely even
+  // after it aged past the 48h / 7d windows — confusing because the
+  // post itself is no longer preliminary, only the captured reading
+  // is. Now the badge nudges toward what's overdue.
+  //
+  // The strict windows used by getDetectionSnapshot / outlier
+  // detection / time-normalization are unchanged — this is purely
+  // visual labeling.
+  const hoursOld = hoursSincePost(post.postedAt);
   const has7d = post.snapshots.some((s) => s.hoursAfterPosting >= 6.5 * 24);
   const has48 = post.snapshots.some(
     (s) => s.hoursAfterPosting >= 36 && s.hoursAfterPosting < 6.5 * 24,
   );
+  const onlyEarly =
+    post.snapshots.length > 0 && !has48 && !has7d;
+
+  // No snapshots at all (the "remind me at 48h" flow): badge follows
+  // the post's age so the user sees "needs 48h" once the window opens
+  // instead of "pending" forever.
+  if (post.snapshots.length === 0) {
+    if (hoursOld < 36) return "pending";
+    if (hoursOld < 6.5 * 24) return "needs 48h";
+    return "needs 7d";
+  }
+
   const parts: string[] = [];
-  if (post.snapshots.length === 0) parts.push("pending");
-  else if (post.snapshots.length === 1 && !has48 && !has7d) parts.push("preliminary");
+
+  if (onlyEarly) {
+    // Only have a pre-36h reading. Stay "preliminary" while the post
+    // is genuinely new; flip to "needs 48h" / "needs 7d" once the
+    // post has aged past the matching window without a fresh log.
+    if (hoursOld < 36) parts.push("preliminary");
+    else if (hoursOld < 6.5 * 24) parts.push("needs 48h");
+    else parts.push("needs 7d");
+  }
   if (has48) parts.push("48h");
   if (has7d) parts.push("7d");
+
   return parts.join(" · ");
 }
 
