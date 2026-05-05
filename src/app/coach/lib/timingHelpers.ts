@@ -27,21 +27,41 @@ export function hoursSincePost(postedAt: string): number {
   return Math.max(0, ms / ONE_HOUR_MS);
 }
 
-// The 48h-window snapshot if one exists. 36-72h is wide enough to cover
-// real-world "I logged this around two days later" while staying close
-// to the proven signal point.
+// The snapshot we use for outlier detection + rate display. Three
+// fallback tiers, picked best → loosest:
+//
+//   1. Strict 36-72h window snapshot — best fit for the
+//      time-normalization curves; use whenever it exists.
+//   2. Latest snapshot whose own hoursAfterPosting is ≥ 24 — past the
+//      early-noise window, so projecting forward to a 48h equivalent
+//      is reliable.
+//   3. Post-age fallback: once the post ITSELF is 36h+ old, the
+//      latest snapshot represents a settled-enough engagement floor
+//      for outlier comparison (Instagram metrics monotonically grow,
+//      so the user's earlier log is a lower bound on what's
+//      happening now). Skips zero-reach placeholder logs.
+//
+// Tier 3 closes the bug where a user logs preliminary metrics on day
+// one, the post ages past 36h, but the post stays invisible to
+// outlier detection forever because the snapshot's frozen
+// hoursAfterPosting was < 24. With tier 3 the post auto-enters the
+// detection pool as time passes — no user action required.
 export function getDetectionSnapshot(post: LoggedPost): PostSnapshot | null {
   const fortyEight = post.snapshots.find(
     (s) => s.hoursAfterPosting >= 36 && s.hoursAfterPosting <= 72,
   );
   if (fortyEight) return fortyEight;
-  // Fall back to the latest snapshot only if it represents settled
-  // data. A preliminary <24h snapshot isn't reliable enough for outlier
-  // detection — return null so the caller skips the post.
+
   const latest = post.snapshots[post.snapshots.length - 1];
   if (!latest) return null;
-  if (latest.hoursAfterPosting < 24) return null;
-  return latest;
+
+  if (latest.hoursAfterPosting >= 24) return latest;
+
+  // Tier 3 — age-based fallback. Skip placeholder zero-metric logs.
+  const postHoursOld = hoursSincePost(post.postedAt);
+  if (postHoursOld >= 36 && latest.metrics.reach > 0) return latest;
+
+  return null;
 }
 
 // Returns the next reminder/checkpoint the user should log for this

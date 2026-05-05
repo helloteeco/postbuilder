@@ -208,47 +208,34 @@ function emptyNewDraft(pillars: Pillar[]): NewPostDraft {
 }
 
 function snapshotsBadgeForPost(post: LoggedPost): string {
-  // The display badge reflects BOTH what data the user has logged AND
-  // how old the post is right now. Without the current-age check, a
-  // post logged early stayed labeled "preliminary" indefinitely even
-  // after it aged past the 48h / 7d windows — confusing because the
-  // post itself is no longer preliminary, only the captured reading
-  // is. Now the badge nudges toward what's overdue.
+  // The badge is driven by POST AGE first, snapshot data second. Once
+  // a post crosses 36h with any data logged, the badge auto-flips to
+  // "48h" — same logic as the detection-snapshot tier-3 fallback in
+  // timingHelpers.ts, so the visible label and the outlier-detection
+  // pool stay in sync.
   //
-  // The strict windows used by getDetectionSnapshot / outlier
-  // detection / time-normalization are unchanged — this is purely
-  // visual labeling.
+  // The strict 36-72h window in getDetectionSnapshot is unchanged for
+  // posts that DO have a settled snapshot in that range — this is
+  // about catching the case where the user logged early and never
+  // came back to update.
   const hoursOld = hoursSincePost(post.postedAt);
-  const has7d = post.snapshots.some((s) => s.hoursAfterPosting >= 6.5 * 24);
-  const has48 = post.snapshots.some(
+  const hasSnapshot = post.snapshots.length > 0;
+
+  if (hoursOld < 36) {
+    return hasSnapshot ? "preliminary" : "pending";
+  }
+  if (hoursOld < 6.5 * 24) {
+    return hasSnapshot ? "48h" : "needs 48h";
+  }
+  // 7d+
+  if (!hasSnapshot) return "needs 7d";
+
+  // If the user logged BOTH a 48h-window snapshot AND a 7d+ one, show
+  // both badges so they can see they have paired data points.
+  const has48Snap = post.snapshots.some(
     (s) => s.hoursAfterPosting >= 36 && s.hoursAfterPosting < 6.5 * 24,
   );
-  const onlyEarly =
-    post.snapshots.length > 0 && !has48 && !has7d;
-
-  // No snapshots at all (the "remind me at 48h" flow): badge follows
-  // the post's age so the user sees "needs 48h" once the window opens
-  // instead of "pending" forever.
-  if (post.snapshots.length === 0) {
-    if (hoursOld < 36) return "pending";
-    if (hoursOld < 6.5 * 24) return "needs 48h";
-    return "needs 7d";
-  }
-
-  const parts: string[] = [];
-
-  if (onlyEarly) {
-    // Only have a pre-36h reading. Stay "preliminary" while the post
-    // is genuinely new; flip to "needs 48h" / "needs 7d" once the
-    // post has aged past the matching window without a fresh log.
-    if (hoursOld < 36) parts.push("preliminary");
-    else if (hoursOld < 6.5 * 24) parts.push("needs 48h");
-    else parts.push("needs 7d");
-  }
-  if (has48) parts.push("48h");
-  if (has7d) parts.push("7d");
-
-  return parts.join(" · ");
+  return has48Snap ? "48h · 7d" : "7d";
 }
 
 // Pick the snapshot we'd pass to TopPostMode if the user clicked
