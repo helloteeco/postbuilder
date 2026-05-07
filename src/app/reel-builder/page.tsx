@@ -549,11 +549,18 @@ function BgPicker({
               value={customPalette.bg}
               onChange={(e) => onCustomBgChange(e.target.value)}
               className="h-6 w-8 cursor-pointer rounded border border-gray-300"
-              aria-label="Custom background color"
+              aria-label="Custom background color picker"
             />
-            <code className="text-[10px] uppercase text-gray-500">
-              {customPalette.bg}
-            </code>
+            <input
+              type="text"
+              value={customBg ?? customPalette.bg}
+              onChange={(e) => onCustomBgChange(e.target.value)}
+              maxLength={7}
+              placeholder="#000000"
+              spellCheck={false}
+              className="w-20 rounded border border-gray-300 px-1 py-0.5 font-mono text-[10px] uppercase tracking-tight"
+              aria-label="Custom background hex"
+            />
           </label>
           <label className="flex items-center gap-1.5 text-[11px] text-gray-700">
             <span>Accent</span>
@@ -562,11 +569,18 @@ function BgPicker({
               value={customPalette.accent}
               onChange={(e) => onCustomAccentChange(e.target.value)}
               className="h-6 w-8 cursor-pointer rounded border border-gray-300"
-              aria-label="Custom accent color"
+              aria-label="Custom accent color picker"
             />
-            <code className="text-[10px] uppercase text-gray-500">
-              {customPalette.accent}
-            </code>
+            <input
+              type="text"
+              value={customAccent ?? customPalette.accent}
+              onChange={(e) => onCustomAccentChange(e.target.value)}
+              maxLength={7}
+              placeholder="#000000"
+              spellCheck={false}
+              className="w-20 rounded border border-gray-300 px-1 py-0.5 font-mono text-[10px] uppercase tracking-tight"
+              aria-label="Custom accent hex"
+            />
           </label>
         </div>
       )}
