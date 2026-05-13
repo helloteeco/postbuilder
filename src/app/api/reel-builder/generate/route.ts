@@ -66,7 +66,9 @@ OUTPUT: 3 reel variations. Each variation contains:
    - Body content: turn sections 2-9 of the original ghostwriter output into a numbered or bulleted list inside the caption, condensed for Instagram readability
    - Each item in the list is 1-3 sentences max
    - Keep all specific numbers, dollar amounts, percentages, named cities, named people, named brands from the original
-   - Use the exact CTA from section 10 of the original output, verbatim
+   - REQUIRED: include a SAVE prompt as the second-to-last block, right before the DM CTA. Place it on its own line (blank line above + below). Make it SPECIFIC to the content — not "save this!" but "Save this — you'll want the numbers next time you [specific scenario from the post]." or "Save this before you forget [specific concrete detail]." The reader has just consumed the value; this is the moment they decide whether to keep it. Save rate is the metric we're tuning for, so this line is non-negotiable.
+   - OPTIONAL share prompt: include one ONLY when the angle is counter-intuitive, news-driven, or question — those angles spark "who do I know who needs to see this?" naturally. Place right after the save line, one short sentence: "Share this with anyone [specific person/scenario from the post]." Skip the share ask entirely on list-promise and specific-number angles — those are reference material, save-only.
+   - Use the exact CTA from section 10 of the original output, verbatim, AFTER the save/share block
    - Close with a confident sign-off line
 
 VOICE RULES (locked):
