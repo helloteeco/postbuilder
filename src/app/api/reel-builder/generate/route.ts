@@ -47,17 +47,21 @@ INPUT: The user's 10-section ghostwriter output (sections 1-10).
 OUTPUT: 3 reel variations. Each variation contains:
 
 1. A hook headline (slide-1 cover style)
-   - TARGET 32-38 characters (5-7 words) so it wraps cleanly into 3 BALANCED lines on the cover. 40 chars / 7 words is a hard cap, not a goal.
-   - No individual word over 12 characters (longer words orphan a line and break the layout).
-   - Same hook formula style as the original section 1.
+   - HOOK STYLE — write the cover the way a top creator does:
+     • LEAD WITH THE MOST ARRESTING TOKEN — a number, dollar amount, or recognizable name ("13 AI tools…", "$25K down…", "Trump made…", "Buffett's last…").
+     • USE PERIODS AS BEATS for rhythm and to pack short lines ("$25K down. $70K a year." · "No English. 50+ rentals.").
+     • STATE A BOLD, COMPLETE CLAIM, not a topic label ("Renting now costs more than owning" — not "Rent vs own").
+     • EMBED ONE SPECIFIC NUMBER OR PROOF in the headline when the topic allows.
+     • TENSION / CURIOSITY works ("6 ways to get paid. 1 keeps you broke.").
    - Different angle from the other 2 variations.
-   - FIT VERIFICATION before you output: the cover renders at 132pt on a 920px-wide canvas; each line fits ~12 characters. Mentally split your headline into the 3 lines it'd wrap to. Are they balanced? Is any single short word stranded? Does any word need to break across lines? If yes, rewrite — pick shorter synonyms, drop filler ("the", "a", "is"), or find a different angle that compresses cleaner. If you can't make a hook fit AND hit, change the angle, don't lengthen the hook.
+   - FIT — do NOT cut words off: TARGET 30-40 characters (period-beats can carry up to ~44 if every line still fits 3 balanced lines). No individual word over 12 characters. Before output, mentally lay it out at 132pt (each line fits ~12 chars), split into the 3 lines it'd wrap to. If any line strands a short word, any word breaks mid-word, or it spills past 3 lines — REWRITE (shorter synonyms, add a period beat to control the break, drop filler, or pick a tighter angle). A different angle beats an overflowing hook.
    - REQUIRED: wrap 1-2 high-impact words in **double asterisks** so they render in the cover's accent color. Pick the words that ARE the hook — dollar amounts, percentages, specific numbers, surprise nouns, emotional triggers ($250K, hidden, never, free, secret, 16.4%, etc.). Never bold function words like "the", "is", "of". A headline with ZERO bolded words is invalid output.
    - REQUIRED: NO INSIDER JARGON. Write the headline so a viewer with zero context on the niche understands it instantly. Banned: niche acronyms (STR, ADR, RevPAR, OTA, PMS, ARV, BRRRR, COC, KPI, MQL, CAC, LTV, EBITDA, ROAS, NPS, etc.), industry shorthand ("the loophole", "1031", "buy box", "cap rate", "the stack") unless universally known to a non-specialist. Spelling the term in parentheses ("STR (short term rental)") is NOT a fix — it eats valuable hook space. Rephrase entirely. Prefer everyday brand names (Airbnb, Amazon, Google, Uber) and plain English (rental, guest, booking, customer, deal, profit) over insider terms. Bad: "8 things I learned starting my STR." Good: "8 things I learned hosting my first Airbnb." or "8 lessons from my first rental."
 
 2. An optional subtitle
-   - TARGET ≤45 characters to GUARANTEE single-line fit on the cover (rendered at 48pt across the 920px canvas). 60 chars is a hard cap and risks wrapping to 2 lines, which breaks the layout. Aim for ONE clean line.
-   - Must ADD NEW VALUE — a sharper detail, specific number, date, or concrete payoff that the headline doesn't already say. Do NOT paraphrase the headline. If the subtitle would just be a rephrase, OMIT it (set hookSubtitle to empty string).
+   - SUBTITLE STYLE — the subtitle is the PROOF layer under the claim. It ALWAYS adds new, concrete info the headline doesn't state: a price range, timeframe, mechanism, location, or named person ("Homes $212K to $314K. Verified." · "3 hours a week. $50/mo per property." · "Pharmacist in CA. Own in Toledo OH." · "How to use it before Dec 31."). Often its own period-beats.
+   - TARGET ≤42 characters to GUARANTEE single-line fit (rendered at 48pt across the 920px canvas). 60 chars is a hard cap that risks a 2-line wrap. Aim for ONE clean line.
+   - Must ADD NEW VALUE the headline doesn't already say. Do NOT paraphrase the headline. If the subtitle would just be a rephrase, OMIT it (set hookSubtitle to empty string).
    - REQUIRED: if the subtitle has 1-2 standout words (numbers, dates, dollar amounts, key nouns), wrap them in **double asterisks** for accent-color rendering. Same selection rule as the headline. Skip the bolding if there's no obvious standout — better to have no bold than a forced one.
    - REQUIRED: NO INSIDER JARGON. Same rule as the headline — write for an outsider scrolling past. The CAPTION (below) may use precise industry terms once the reader has chosen to dig in, but the cover (headline + subtitle) is for attraction, not explanation.
 

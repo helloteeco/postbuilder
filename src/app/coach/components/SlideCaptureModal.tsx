@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadLoggedPosts,
   replacePost,
+  type ContentAnalysis,
   type LoggedPost,
   type SlideContent,
 } from "@/app/coach/lib/storage";
@@ -319,6 +320,16 @@ export default function SlideCaptureModal({
           </div>
         </div>
 
+        {hasExistingSlides && (
+          <CapturedContentView
+            slides={post.slides ?? []}
+            analysis={post.contentAnalysis}
+          />
+        )}
+
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+          {hasExistingSlides ? "Replace with new content" : "Add slide content"}
+        </div>
         <div className="mb-4 flex flex-wrap gap-2">
           <button
             type="button"
@@ -388,6 +399,120 @@ export default function SlideCaptureModal({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Read-only view of the content currently captured on this post.
+// Shows the actual slide-by-slide copy PLUS the structural fingerprint
+// that contentAnalysis derived from it. This is the data that feeds
+// Coach Mode's prompt builder (winner deep-study block + structural
+// mirror rules) when the post is a top performer — so the user can
+// verify exactly what's driving their prompts.
+function CapturedContentView({
+  slides,
+  analysis,
+}: {
+  slides: SlideContent[];
+  analysis?: ContentAnalysis;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+          Currently captured · {slides.length} slide{slides.length === 1 ? "" : "s"}
+        </span>
+        <span className="text-xs text-emerald-700">{open ? "Hide ▴" : "Show ▾"}</span>
+      </button>
+
+      {open && (
+        <>
+          <p className="mt-1 text-[11px] leading-relaxed text-emerald-900/80">
+            This is the exact copy + structure feeding your Coach Mode prompts.
+            When this post is a top performer, the prompt builder mirrors this
+            structure and pulls this slide text in as a deep-study model for
+            new posts.
+          </p>
+
+          {/* Slide-by-slide copy */}
+          <ol className="mt-3 space-y-2">
+            {slides.map((s) => (
+              <li
+                key={s.slideNumber}
+                className="rounded border border-emerald-200 bg-white p-2"
+              >
+                <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+                  Slide {s.slideNumber}
+                  {s.isHook ? " · hook" : s.isCTA ? " · CTA" : ""}
+                </div>
+                <div className="whitespace-pre-wrap text-xs leading-relaxed text-gray-800">
+                  {s.text || "(empty)"}
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          {/* Structural fingerprint */}
+          {analysis && (
+            <div className="mt-3 rounded border border-emerald-200 bg-white p-2">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+                Structural fingerprint (what the prompt builder reads)
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <FpChip label="Format" value={fmtEnum(analysis.formatType)} />
+                <FpChip label="Hook style" value={fmtEnum(analysis.hookStyle)} />
+                <FpChip label="Slides" value={String(analysis.slideCount)} />
+                <FpChip
+                  label="Avg words/slide"
+                  value={String(analysis.averageSlideLength)}
+                />
+                <FpChip
+                  label="CTA"
+                  value={
+                    fmtEnum(analysis.ctaPattern) +
+                    (analysis.ctaKeyword ? ` "${analysis.ctaKeyword}"` : "")
+                  }
+                />
+              </div>
+              <FpList label="Dollar amounts" items={analysis.dollarAmounts} />
+              <FpList label="Percentages" items={analysis.percentages} />
+              <FpList label="Years" items={analysis.yearReferences} />
+              <FpList label="Named cities" items={analysis.namedCities} />
+              <FpList label="Named people" items={analysis.namedPeople} />
+              <FpList label="Named brands" items={analysis.namedBrands} />
+              <FpList label="Bolded terms" items={analysis.boldedTerms} />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function fmtEnum(v: string): string {
+  return v.replace(/_/g, " ");
+}
+
+function FpChip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-900">
+      {label}: <span className="font-semibold">{value}</span>
+    </span>
+  );
+}
+
+function FpList({ label, items }: { label: string; items: string[] }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mt-1.5 text-[11px] text-gray-700">
+      <span className="font-semibold text-emerald-800">{label}:</span>{" "}
+      {items.join(", ")}
     </div>
   );
 }

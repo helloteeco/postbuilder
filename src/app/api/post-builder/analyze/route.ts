@@ -39,14 +39,19 @@ Reading level target: ${params.readingLevel}. Use short, plain words. No jargon.
 CARDINAL RULES — follow without exception:
 1. Return ONLY valid JSON matching the schema shown below. No commentary before or after.
 2. Produce no more than ${Math.min(params.slideCount, 10)} slides TOTAL. Never exceed 10. Produce fewer if the content doesn't need more.
-3. Slide 1 is ALWAYS type "hook-opener". COVER slide: one punchy headline + optional subtitle. No items or footer. Rendered at 132px on a 920px-wide canvas — roughly 11-13 characters fit per line, so a TIGHT 3-line headline = ~32-38 characters total. TARGET 32-38 chars (5-7 words) to guarantee clean 3-line wrapping; treat 40 chars as a hard cap, not a goal. No single word over 12 characters (longer words orphan a line and break the layout).
-   FIT VERIFICATION before you output: imagine the headline laid out at 132pt across the canvas. Each line fits ~12 characters. Mentally split your headline into the 3 lines it would wrap to. Are they balanced? Does any line have a single short word stranded by itself? Does any word need to break across lines? If yes, rewrite — pick shorter synonyms, drop filler words ("the", "a", "is"), or find a different angle that compresses cleaner. If you can't make a hook fit + hit, the right move is a DIFFERENT angle, not a longer hook.
-   Examples that fit cleanly:
-     "$25K down. $70K a year."   (22 chars / 6 words / 2 short lines)
-     "What I learned hosting Airbnb"   (29 chars / 5 words)
-     "6 markets I'd buy in 2026"   (25 chars / 6 words)
-     "How W2 earners pay zero tax"   (27 chars / 6 words)
-   Treat slide 1 like a magazine cover, not a paragraph. Every word must earn its place — no filler.
+3. Slide 1 is ALWAYS type "hook-opener". COVER slide: one punchy headline + optional subtitle. No items or footer. Rendered at 132px on a 920px-wide canvas. A clean cover wraps to 3 BALANCED lines for the headline and 1 line for the subtitle.
+   HOOK STYLE — write the cover the way a top creator does. Study this pattern and match it:
+   • LEAD WITH THE MOST ARRESTING TOKEN — a number, a dollar amount, or a recognizable name. ("13 AI tools…", "$25K down…", "Trump made…", "Buffett's last…", "$100,000+ a month…")
+   • USE PERIODS AS BEATS to create rhythm and pack short lines. ("$25K down. $70K a year." · "Cambodian. No English. 50+ rentals." · "1 thing a year. $10M at 65.")
+   • STATE A BOLD, COMPLETE CLAIM, not a topic label. ("Renting now costs more than owning" — not "Rent vs own". "How W2 earners pay zero tax" — not "Tax tips".)
+   • EMBED ONE SPECIFIC NUMBER OR PROOF right in the headline whenever the topic allows ($, %, a year count, a timeframe).
+   • TENSION / CURIOSITY works: "6 ways to get paid. 1 keeps you broke." · "Towns no one talks about." · "The gift most won't ask for."
+   SUBTITLE STYLE — the subtitle is the PROOF layer under the claim. It ALWAYS adds new, concrete information the headline doesn't state: a price range, a timeframe, a mechanism, a location, a named person. ("Homes $212K to $314K. Verified." · "3 hours a week. $50/mo per property." · "Pharmacist in CA. Own in Toledo OH." · "How to use it before Dec 31."). One line. Often its own period-beats. NEVER a rephrase of the headline — if it would just restate the headline, omit it.
+   FIT — DO NOT cut words off:
+   • TARGET 30-40 characters for the headline (period-beats can carry up to ~44 if every line still fits). No single word over 12 characters (longer words orphan a line).
+   • Before you output, mentally lay the headline out at 132pt: each line fits ~12 characters; split it into the 3 lines it would wrap to. If any line strands a single short word, if any word would break mid-word, or if it spills past 3 lines — REWRITE. Pick shorter synonyms, add a period beat to control the break, drop filler ("the", "a", "is"), or choose a tighter angle. A different angle beats a headline that overflows.
+   • Subtitle: TARGET ≤42 chars so it stays on ONE line at 48px. 60 is a hard cap that risks wrapping.
+   Treat slide 1 like a magazine cover. Every word earns its place.
 4. Final slide is always type "cta" — DM keyword, free resource, or clear next step.
 5. Compress mercilessly. Each slide must be SCANNABLE in under 4 seconds.
 6. Per-slide budgets (HARD LIMITS — never exceed):
