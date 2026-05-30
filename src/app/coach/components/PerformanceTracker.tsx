@@ -855,6 +855,33 @@ function PostRow({
     year: "numeric",
   });
 
+  // Slide-1 hook line surfaced for findability — when slides are
+  // captured, show the actual cover text below the title so the user
+  // can match a logged post to what it actually looks like on IG.
+  // The "title" field is whatever the user typed when logging (often a
+  // note or shorthand label), which can drift from the real cover
+  // copy. Strip ** asterisks for plain reading; truncate at ~110
+  // chars so long hooks don't blow up the row.
+  const coverHookPreview = (() => {
+    const slide1 = post.slides?.[0];
+    if (!slide1 || !slide1.text) return null;
+    const cleaned = slide1.text
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/\*/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!cleaned) return null;
+    return cleaned.length > 110 ? cleaned.slice(0, 107).trimEnd() + "…" : cleaned;
+  })();
+
+  // Only worth showing when it adds info — skip if the captured hook
+  // is basically identical to the typed title (case-insensitive
+  // substring match either way).
+  const showCoverHook =
+    coverHookPreview &&
+    !post.title.toLowerCase().includes(coverHookPreview.toLowerCase().slice(0, 30)) &&
+    !coverHookPreview.toLowerCase().includes(post.title.toLowerCase().slice(0, 30));
+
   return (
     <li
       className={`flex flex-wrap items-center justify-between gap-3 p-3 text-sm ${
@@ -878,6 +905,15 @@ function PostRow({
             </span>
           )}
         </div>
+        {showCoverHook && (
+          <div
+            className="mt-0.5 truncate text-xs italic text-gray-600"
+            title={coverHookPreview ?? undefined}
+          >
+            <span className="not-italic text-gray-400">▣ Cover:</span>{" "}
+            &ldquo;{coverHookPreview}&rdquo;
+          </div>
+        )}
         <div className="text-xs text-gray-500">
           {datePostedLocal}
           {display
