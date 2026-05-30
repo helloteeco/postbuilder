@@ -217,8 +217,27 @@ export default function SlideCaptureModal({
       return;
     }
     const analysis = analyzeContent(slides);
+    // Auto-sync the post's title from slide 1's hook text whenever
+    // slides are captured. The user shouldn't have to maintain two
+    // labels in parallel — if they've captured slides, the cover
+    // hook IS the source of truth for what this post looks like on
+    // IG. We clean **bold** markers and collapse whitespace, cap at
+    // 110 chars so the title stays scannable in the row. If slide 1
+    // has no usable text we fall back to the existing title.
+    const slide1Text = slides[0]?.text ?? "";
+    const cleanedHook = slide1Text
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/\*/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const nextTitle = cleanedHook
+      ? cleanedHook.length > 110
+        ? cleanedHook.slice(0, 107).trimEnd() + "…"
+        : cleanedHook
+      : post.title;
     const updated: LoggedPost = {
       ...post,
+      title: nextTitle,
       slides,
       contentAnalysis: analysis,
       postBuilderDraftId: draftId ?? post.postBuilderDraftId,

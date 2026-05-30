@@ -237,6 +237,24 @@ function migrateLegacyPost(old: CoachPost): LoggedPost {
 
 // Reads + migrates posts. If any entries were in the old shape they get
 // written back to localStorage so subsequent loads are pure.
+// Derive the canonical title for a post from its captured slide 1
+// hook. Posts with no slides keep whatever the user typed. The user
+// explicitly wants "anything with slides" to use the cover hook as
+// title, so this runs on every load + on every capture/replace.
+// Strips ** asterisks, collapses whitespace, caps at 110 chars so
+// the title stays scannable in the row.
+function deriveTitleFromSlides(post: LoggedPost): string {
+  const slide1Text = post.slides?.[0]?.text;
+  if (!slide1Text) return post.title;
+  const cleaned = slide1Text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return post.title;
+  return cleaned.length > 110 ? cleaned.slice(0, 107).trimEnd() + "…" : cleaned;
+}
+
 export function loadLoggedPosts(): LoggedPost[] {
   if (!isBrowser()) return [];
   try {
@@ -248,7 +266,16 @@ export function loadLoggedPosts(): LoggedPost[] {
     const result: LoggedPost[] = [];
     for (const p of parsed) {
       if (isLoggedPostShape(p)) {
-        result.push(p);
+        // Title self-heal: when slides exist, title MUST be the
+        // slide-1 cover hook. Idempotent — no write unless we
+        // actually change something.
+        const derived = deriveTitleFromSlides(p);
+        if (derived !== p.title) {
+          result.push({ ...p, title: derived });
+          didMigrate = true;
+        } else {
+          result.push(p);
+        }
       } else if (isLegacyCoachPostShape(p)) {
         result.push(migrateLegacyPost(p));
         didMigrate = true;
@@ -256,7 +283,7 @@ export function loadLoggedPosts(): LoggedPost[] {
       // anything else: silently drop — malformed
     }
     if (didMigrate) {
-      // Write back so old shape is gone after the first read.
+      // Write back so subsequent loads are pure no-ops.
       try {
         localStorage.setItem(postsKey(), JSON.stringify(result));
       } catch {
