@@ -65,6 +65,26 @@ function compositeScore(p: CoachPost): number {
 // strong performer; a flagged + strong post ranks firmly at the top.
 const WINNER_FLAG_BOOST = 2.0;
 
+// Recency multiplier on the final score. Old wins still teach voice
+// and structure, but recent wins reflect the current IG algorithm and
+// audience. Exponential half-life of 90 days, floored at 0.15 so a
+// great post from a year ago still has ~15% pull. Net effect: as a
+// user logs more posts over time, the top-3 winners list naturally
+// drifts toward what's working RIGHT NOW without us having to
+// hand-curate or delete old data.
+const RECENCY_HALF_LIFE_DAYS = 90;
+const RECENCY_FLOOR = 0.15;
+
+function recencyMultiplier(post: LoggedPost): number {
+  const ageMs = Date.now() - new Date(post.postedAt).getTime();
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+  if (ageDays <= 0) return 1;
+  return Math.max(
+    RECENCY_FLOOR,
+    Math.pow(0.5, ageDays / RECENCY_HALF_LIFE_DAYS),
+  );
+}
+
 // Score a LoggedPost using its detection snapshot's normalized metrics
 // — same fairness rule as the Top Post Mode badges. Returns null when
 // the post can't be evaluated (no settled snapshot yet).
@@ -75,6 +95,9 @@ interface ScoredPost {
 }
 
 function scorePost(lp: LoggedPost): ScoredPost | null {
+  // Archived posts are explicitly excluded from the learning pool —
+  // the user told us to stop using this for influencing prompts.
+  if (lp.isArchived) return null;
   const snap = getDetectionSnapshot(lp);
   if (!snap) return null;
   const normalized: PostSnapshot = {
@@ -84,7 +107,8 @@ function scorePost(lp: LoggedPost): ScoredPost | null {
   const cv = toCoachPost(lp, normalized);
   const base = compositeScore(cv);
   const boost = lp.isWinner ? WINNER_FLAG_BOOST : 0;
-  return { cv, lp, score: base + boost };
+  const recency = recencyMultiplier(lp);
+  return { cv, lp, score: (base + boost) * recency };
 }
 
 interface LearningContext {

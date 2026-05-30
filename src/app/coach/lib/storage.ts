@@ -122,6 +122,15 @@ export interface LoggedPost {
   contentAnalysis?: ContentAnalysis;
   // Optional reference to the Post Builder draft a user linked.
   postBuilderDraftId?: string;
+  // User-set archive flag. Archived posts are:
+  //   - hidden from the default Performance Tracker list (visible
+  //     via the Archived filter chip)
+  //   - excluded from the scoring pool feeding the prompt builder's
+  //     learning context, so old/irrelevant posts stop influencing
+  //     what Claude mirrors
+  //   - their captured slides + structural analysis ARE preserved,
+  //     so unarchiving restores their influence with no data loss
+  isArchived?: boolean;
 }
 
 // Legacy single-metrics shape. Still consumed by TopPostMode and the
@@ -404,6 +413,16 @@ export function setPostWinner(postId: string, isWinner: boolean): void {
   const all = loadLoggedPosts();
   saveLoggedPosts(
     all.map((p) => (p.id === postId ? { ...p, isWinner } : p)),
+  );
+}
+
+// Archive / unarchive — toggles the user-set isArchived flag. Used
+// by the Performance Tracker's Archive button. See LoggedPost.isArchived
+// docstring for what archiving does (list filter + scoring pool exclusion).
+export function setPostArchived(postId: string, isArchived: boolean): void {
+  const all = loadLoggedPosts();
+  saveLoggedPosts(
+    all.map((p) => (p.id === postId ? { ...p, isArchived } : p)),
   );
 }
 

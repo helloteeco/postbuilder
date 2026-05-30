@@ -30,6 +30,7 @@ import {
   replacePost,
   ratePerf,
   saveRate,
+  setPostArchived,
   shareRate,
   toCoachPost,
   type CoachPost,
@@ -122,6 +123,11 @@ interface EditDraft {
 }
 
 type FormDraft = NewPostDraft | UpdateDraft | EditDraft | null;
+
+// Filter chips above the post list. "active" hides archived; "top"
+// only outliers + manual winners; "needs" only posts with an open
+// snapshot reminder; "archived" the inverse of active.
+type ListFilter = "active" | "top" | "needs" | "archived";
 
 const EMPTY_METRICS: MetricsForm = {
   reach: "",
@@ -256,6 +262,10 @@ export default function PerformanceTracker() {
   const [slideCaptureFor, setSlideCaptureFor] = useState<string | null>(null);
   // ID of the post the user is remixing (Claude.ai prompt modal).
   const [remixingPostId, setRemixingPostId] = useState<string | null>(null);
+  // Which slice of the post list to show. Defaults to "active" so the
+  // user lands on a focused, non-bloated view; can switch via the
+  // chip bar above the list.
+  const [listFilter, setListFilter] = useState<ListFilter>("active");
   // Bumped on dismissal so LoggingReminder re-evaluates after a skip.
   const [reminderRev, setReminderRev] = useState(0);
   // Drafts handed off from the Post Builder, awaiting log. Mount load +
@@ -548,6 +558,13 @@ export default function PerformanceTracker() {
     setDraft(null);
   }
 
+  function onArchiveToggle(id: string) {
+    const p = posts.find((x) => x.id === id);
+    if (!p) return;
+    setPostArchived(id, !p.isArchived);
+    setPosts(loadLoggedPosts());
+  }
+
   function onDelete(id: string) {
     deletePost(id);
     setPosts(loadLoggedPosts());
@@ -703,41 +720,21 @@ export default function PerformanceTracker() {
         />
       )}
 
-      <div>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-          Recent posts
-        </div>
-        {posts.length === 0 ? (
-          <div className="rounded border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
-            No posts logged yet. Click &ldquo;Log a new post&rdquo; above to start tracking.
-          </div>
-        ) : (
-          <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
-            {posts.map((p) => (
-              <PostRow
-                key={p.id}
-                post={p}
-                detectionOn={detectionOn}
-                averages={averages}
-                onMarkWinner={() => setTopPostId(p.id)}
-                onDelete={() => onDelete(p.id)}
-                onLogUpdate={() => startUpdateDraft(p)}
-                onEdit={() => startEditDraft(p)}
-                onAddSlides={() => setSlideCaptureFor(p.id)}
-                onRemix={() => setRemixingPostId(p.id)}
-              />
-            ))}
-          </ul>
-        )}
-        {posts.length > 0 && !detectionOn && (
-          <div className="mt-2 rounded border border-dashed border-gray-300 p-2 text-xs text-gray-500">
-            Log {MIN_POSTS_FOR_DETECTION - eligibleCoachViews.length} more post
-            {MIN_POSTS_FOR_DETECTION - eligibleCoachViews.length === 1 ? "" : "s"}{" "}
-            (with 48h+ data) to unlock outlier detection. You can still hit{" "}
-            <em>Mark as winner</em> manually on any post.
-          </div>
-        )}
-      </div>
+      <PostListView
+        posts={posts}
+        listFilter={listFilter}
+        setListFilter={setListFilter}
+        detectionOn={detectionOn}
+        averages={averages}
+        eligibleCount={eligibleCoachViews.length}
+        onMarkWinner={(id) => setTopPostId(id)}
+        onDelete={onDelete}
+        onArchiveToggle={onArchiveToggle}
+        onLogUpdate={(p) => startUpdateDraft(p)}
+        onEdit={(p) => startEditDraft(p)}
+        onAddSlides={(id) => setSlideCaptureFor(id)}
+        onRemix={(id) => setRemixingPostId(id)}
+      />
 
       <TopPostMode
         open={openedView.post !== null}
@@ -789,12 +786,203 @@ export default function PerformanceTracker() {
 
 // ── Sub-components below ───────────────────────────────────────────────
 
+// Wraps the post-list section: header chips that filter by status,
+// the filtered list itself, and the "log N more for detection" footer.
+// Extracted so the parent component stays focused on draft/state
+// orchestration and so the chip-filter logic lives next to the row
+// rendering it controls.
+interface PostListViewProps {
+  posts: LoggedPost[];
+  listFilter: ListFilter;
+  setListFilter: (f: ListFilter) => void;
+  detectionOn: boolean;
+  averages: ReturnType<typeof computeAverages>;
+  eligibleCount: number;
+  onMarkWinner: (id: string) => void;
+  onDelete: (id: string) => void;
+  onArchiveToggle: (id: string) => void;
+  onLogUpdate: (p: LoggedPost) => void;
+  onEdit: (p: LoggedPost) => void;
+  onAddSlides: (id: string) => void;
+  onRemix: (id: string) => void;
+}
+
+function PostListView({
+  posts,
+  listFilter,
+  setListFilter,
+  detectionOn,
+  averages,
+  eligibleCount,
+  onMarkWinner,
+  onDelete,
+  onArchiveToggle,
+  onLogUpdate,
+  onEdit,
+  onAddSlides,
+  onRemix,
+}: PostListViewProps) {
+  // Partition into the four filter buckets in one pass so the chip
+  // counts and the visible list both read from the same partition.
+  const buckets = useMemo(() => {
+    const active: LoggedPost[] = [];
+    const archived: LoggedPost[] = [];
+    const top: LoggedPost[] = [];
+    const needs: LoggedPost[] = [];
+    for (const p of posts) {
+      if (p.isArchived) {
+        archived.push(p);
+        continue;
+      }
+      active.push(p);
+      const detectionSnap = getDetectionSnapshot(p);
+      const isFlagged =
+        detectionOn && detectionSnap
+          ? flagOutlier(
+              toCoachPost(p, {
+                ...detectionSnap,
+                metrics: normalizeMetricsTo48h(
+                  detectionSnap.metrics,
+                  detectionSnap.hoursAfterPosting,
+                ),
+              }),
+              averages,
+            ) !== null
+          : false;
+      if (p.isWinner || isFlagged) top.push(p);
+      if (getRecommendedNextSnapshot(p) !== null) needs.push(p);
+    }
+    return { active, archived, top, needs };
+  }, [posts, detectionOn, averages]);
+
+  const visible: LoggedPost[] = (() => {
+    switch (listFilter) {
+      case "active":
+        return buckets.active;
+      case "top":
+        return buckets.top;
+      case "needs":
+        return buckets.needs;
+      case "archived":
+        return buckets.archived;
+    }
+  })();
+
+  const chips: Array<{
+    id: ListFilter;
+    label: string;
+    count: number;
+    hint: string;
+  }> = [
+    {
+      id: "active",
+      label: "Active",
+      count: buckets.active.length,
+      hint: "All posts not archived — the default view",
+    },
+    {
+      id: "top",
+      label: "Top performers",
+      count: buckets.top.length,
+      hint: "Outlier-flagged + manually-marked winners",
+    },
+    {
+      id: "needs",
+      label: "Needs update",
+      count: buckets.needs.length,
+      hint: "Posts in a 48h or 7d snapshot reminder window",
+    },
+    {
+      id: "archived",
+      label: "Archived",
+      count: buckets.archived.length,
+      hint: "Hidden from default view and excluded from the learning pool",
+    },
+  ];
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+          Recent posts
+        </span>
+        <div className="ml-auto flex flex-wrap gap-1">
+          {chips.map((c) => {
+            const active = c.id === listFilter;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setListFilter(c.id)}
+                title={c.hint}
+                className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition ${
+                  active
+                    ? "border-gray-900 bg-gray-900 text-white"
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                {c.label}{" "}
+                <span
+                  className={
+                    active ? "text-white/80" : "text-gray-500"
+                  }
+                >
+                  · {c.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {posts.length === 0 ? (
+        <div className="rounded border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+          No posts logged yet. Click &ldquo;Log a new post&rdquo; above to start tracking.
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="rounded border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+          Nothing in <em>{chips.find((c) => c.id === listFilter)?.label}</em>{" "}
+          right now. Switch to another filter to see your other posts.
+        </div>
+      ) : (
+        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+          {visible.map((p) => (
+            <PostRow
+              key={p.id}
+              post={p}
+              detectionOn={detectionOn}
+              averages={averages}
+              onMarkWinner={() => onMarkWinner(p.id)}
+              onDelete={() => onDelete(p.id)}
+              onArchiveToggle={() => onArchiveToggle(p.id)}
+              onLogUpdate={() => onLogUpdate(p)}
+              onEdit={() => onEdit(p)}
+              onAddSlides={() => onAddSlides(p.id)}
+              onRemix={() => onRemix(p.id)}
+            />
+          ))}
+        </ul>
+      )}
+
+      {posts.length > 0 && !detectionOn && (
+        <div className="mt-2 rounded border border-dashed border-gray-300 p-2 text-xs text-gray-500">
+          Log {MIN_POSTS_FOR_DETECTION - eligibleCount} more post
+          {MIN_POSTS_FOR_DETECTION - eligibleCount === 1 ? "" : "s"}{" "}
+          (with 48h+ data) to unlock outlier detection. You can still hit{" "}
+          <em>Mark as winner</em> manually on any post.
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface PostRowProps {
   post: LoggedPost;
   detectionOn: boolean;
   averages: ReturnType<typeof computeAverages>;
   onMarkWinner: () => void;
   onDelete: () => void;
+  onArchiveToggle: () => void;
   onLogUpdate: () => void;
   onEdit: () => void;
   onAddSlides: () => void;
@@ -807,6 +995,7 @@ function PostRow({
   averages,
   onMarkWinner,
   onDelete,
+  onArchiveToggle,
   onLogUpdate,
   onEdit,
   onAddSlides,
@@ -886,7 +1075,7 @@ function PostRow({
     <li
       className={`flex flex-wrap items-center justify-between gap-3 p-3 text-sm ${
         needsUpdate ? "border-l-4 border-amber-300 pl-2" : ""
-      }`}
+      } ${post.isArchived ? "opacity-60" : ""}`}
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -1004,9 +1193,26 @@ function PostRow({
         )}
         <button
           type="button"
+          onClick={onArchiveToggle}
+          className={`rounded border px-2 py-0.5 text-xs ${
+            post.isArchived
+              ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+              : "border-gray-300 text-gray-600 hover:bg-gray-100"
+          }`}
+          title={
+            post.isArchived
+              ? "Unarchive — this post will start influencing prompts again"
+              : "Archive — hide from the default list and stop using this for prompt learning. Captured slides + data are preserved."
+          }
+        >
+          {post.isArchived ? "↻ Unarchive" : "Archive"}
+        </button>
+        <button
+          type="button"
           onClick={onDelete}
           className="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
           aria-label="Delete this post"
+          title="Delete this post permanently (cannot be undone). Prefer Archive."
         >
           ×
         </button>
