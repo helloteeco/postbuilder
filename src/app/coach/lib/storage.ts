@@ -21,6 +21,12 @@ import { channelKey, getCurrentChannelId } from "./channels";
 
 export interface PostMetrics {
   reach: number;
+  // Total displays of the post (one account can contribute many).
+  // For carousels = times opened; for reels = play count. Distinct
+  // from reach which counts unique accounts. Optional in the type so
+  // pre-existing snapshots without views still load cleanly; missing
+  // values default to 0 in the form + display layers.
+  views?: number;
   saves: number;
   shares: number;
   likes: number;

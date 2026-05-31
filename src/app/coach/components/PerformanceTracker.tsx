@@ -71,6 +71,7 @@ import RemixPromptModal from "@/app/coach/components/RemixPromptModal";
 
 interface MetricsForm {
   reach: string;
+  views: string;
   saves: string;
   shares: string;
   likes: string;
@@ -131,6 +132,7 @@ type ListFilter = "active" | "top" | "needs" | "archived";
 
 const EMPTY_METRICS: MetricsForm = {
   reach: "",
+  views: "",
   saves: "",
   shares: "",
   likes: "",
@@ -177,6 +179,7 @@ function dateTimeLocalToIso(local: string): string {
 function metricsFromForm(m: MetricsForm): PostMetrics {
   return {
     reach: Number(m.reach) || 0,
+    views: Number(m.views) || 0,
     saves: Number(m.saves) || 0,
     shares: Number(m.shares) || 0,
     likes: Number(m.likes) || 0,
@@ -190,9 +193,10 @@ function metricsFromForm(m: MetricsForm): PostMetrics {
 // inputs from a stored snapshot. Empty number → empty string so the
 // inputs render blank instead of "0".
 function metricsToForm(m: PostMetrics): MetricsForm {
-  const s = (n: number) => (n ? String(n) : "");
+  const s = (n: number | undefined) => (n ? String(n) : "");
   return {
     reach: s(m.reach),
+    views: s(m.views),
     saves: s(m.saves),
     shares: s(m.shares),
     likes: s(m.likes),
@@ -1126,7 +1130,7 @@ function PostRow({
         <div className="text-xs text-gray-500">
           {datePostedLocal}
           {display
-            ? ` · reach ${display.metrics.reach.toLocaleString()} · saves ${display.metrics.saves} · shares ${display.metrics.shares}`
+            ? ` · reach ${display.metrics.reach.toLocaleString()}${display.metrics.views ? ` · views ${display.metrics.views.toLocaleString()}` : ""} · saves ${display.metrics.saves} · shares ${display.metrics.shares}`
             : " · awaiting 48h snapshot"}
         </div>
       </div>
@@ -1620,9 +1624,53 @@ interface MetricsFormGridProps {
   onChange: (k: keyof MetricsForm, v: string) => void;
 }
 
+// Plain-English definition + "why it matters" for each tracked
+// metric. Surfaced inline when the user toggles the metrics guide
+// in the logging form. Worded niche-agnostic so it works for any
+// account, not just real-estate creators.
+const METRIC_GUIDE: Record<
+  keyof MetricsForm,
+  { what: string; why: string }
+> = {
+  reach: {
+    what: "Unique accounts that saw the post (each person counted once).",
+    why: "The denominator for save rate + share rate. Strongest signal of how far the algorithm pushed you.",
+  },
+  views: {
+    what: "Total displays — one person who opens the post twice counts as 2 views. For carousels this is times opened; for reels it's plays.",
+    why: "Views ÷ reach tells you how rewatchable / repeat-engaging your content is. High views with low reach = your existing audience loves it but it's not breaking out.",
+  },
+  saves: {
+    what: "Accounts that bookmarked the post for later.",
+    why: "The strongest 'I'll come back to this' signal — IG's algorithm heavily weights save rate. Target ≥1.5%.",
+  },
+  shares: {
+    what: "Accounts that sent the post in a DM or to a story.",
+    why: "The rarest, highest-quality resonance signal. Target ≥0.6%. A shared post earns you reach beyond your follower base.",
+  },
+  likes: {
+    what: "Accounts that double-tapped.",
+    why: "Lowest-friction action — useful as a sanity check but doesn't move distribution the way saves and shares do.",
+  },
+  comments: {
+    what: "Accounts that left a comment (counts unique authors, not message count).",
+    why: "Engagement quality. Often the strongest predictor of DM volume and niche resonance.",
+  },
+  profileVisits: {
+    what: "Accounts that tapped through to your profile from this post.",
+    why: "Top-of-funnel for follows. Tells you the post is making people curious about you, not just consuming it.",
+  },
+  follows: {
+    what: "Accounts that followed you specifically because of this post.",
+    why: "The bottom-of-funnel growth metric. Posts with high follows-from-post are your audience-building wins.",
+  },
+};
+
 function MetricsFormGrid({ metrics, onChange }: MetricsFormGridProps) {
+  const [guideOpen, setGuideOpen] = useState(false);
   const fields: { key: keyof MetricsForm; label: string; optional?: boolean }[] = [
     { key: "reach", label: "Reach" },
+    { key: "views", label: "Views" },
     { key: "saves", label: "Saves" },
     { key: "shares", label: "Shares" },
     { key: "likes", label: "Likes" },
@@ -1631,21 +1679,54 @@ function MetricsFormGrid({ metrics, onChange }: MetricsFormGridProps) {
     { key: "follows", label: "Follows", optional: true },
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-      {fields.map(({ key, label, optional }) => (
-        <label key={key} className="text-xs text-gray-600">
-          {label}
-          {optional && <span className="text-gray-400"> (optional)</span>}
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={metrics[key]}
-            onChange={(e) => onChange(key, e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-          />
-        </label>
-      ))}
+    <div className="space-y-2">
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setGuideOpen((v) => !v)}
+          className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-100"
+          title="Plain-English definitions of each metric + why each one matters"
+        >
+          {guideOpen ? "Hide metrics guide ▴" : "ⓘ What do these mean?"}
+        </button>
+      </div>
+      {guideOpen && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-[11px] leading-relaxed text-blue-900">
+          <div className="mb-1 font-semibold uppercase tracking-wider text-blue-800">
+            Metrics guide
+          </div>
+          <dl className="space-y-1.5">
+            {fields.map(({ key, label }) => {
+              const g = METRIC_GUIDE[key];
+              return (
+                <div key={key}>
+                  <dt className="inline font-semibold">{label}:</dt>{" "}
+                  <dd className="inline">
+                    {g.what}{" "}
+                    <span className="text-blue-800/80">{g.why}</span>
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {fields.map(({ key, label, optional }) => (
+          <label key={key} className="text-xs text-gray-600">
+            {label}
+            {optional && <span className="text-gray-400"> (optional)</span>}
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={metrics[key]}
+              onChange={(e) => onChange(key, e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </label>
+        ))}
+      </div>
     </div>
   );
 }
