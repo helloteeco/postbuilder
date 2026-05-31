@@ -1,7 +1,7 @@
-// Overlay Studio — shared types. Kept narrow and tight so the rest of
-// the module reads cleanly; per the spec, media is image-only for v1
-// (Phase 5 adds short video) and we render one carousel at a time
-// (Phase 4 adds the listings library).
+// Overlay Studio — shared types. Media-first carousel/reel builder
+// using your own photos. Profile + voice come from the SAME source
+// the rest of the app uses (postBuilder.profile) so face/name/blue
+// check stay consistent across Post Builder, Reel Builder, and here.
 
 export type Audience = "local" | "remote";
 
@@ -47,18 +47,24 @@ export type Position =
   | "BC"
   | "BR";
 
-// Result of luminance analysis on the photo — used to suggest a
-// starting position + color before the user audits.
+// Output canvas size — single toggle at the top of the workspace.
+// "post"  = 1080×1350 (IG feed carousel, matches Post Builder)
+// "reel"  = 1080×1920 (IG reel cover, matches Reel Builder)
+export type OutputFormat = "post" | "reel";
+
+export const OUTPUT_DIMENSIONS: Record<OutputFormat, { w: number; h: number; label: string }> = {
+  post: { w: 1080, h: 1350, label: "Post (1080×1350)" },
+  reel: { w: 1080, h: 1920, label: "Reel cover (1080×1920)" },
+};
+
 export interface AutoAnalysis {
   band: "top" | "center" | "bottom";
   color: "light" | "dark";
 }
 
-// One photo in the carousel under audit. dataUrl is the user's
-// uploaded file as a base64 string so it survives a page refresh
-// inside localStorage. Per the build spec, the photo input is a real
-// <input type="file" multiple>, never a hidden/custom widget, so the
-// Claude Chrome extension can drop files straight in.
+// One photo + the words you want on it. headline = the big bold text,
+// body = the line(s) you want to say about it (this also feeds the
+// post caption).
 export interface OverlayMedia {
   id: string;
   dataUrl: string;
@@ -73,16 +79,16 @@ export interface OverlayMedia {
   auto: AutoAnalysis;
 }
 
-// Persisted settings for the active channel. The audience / pillar /
-// CTA flow the spec defines.
 export interface OverlaySettings {
+  outputFormat: OutputFormat;
+  showProfile: boolean;
   audience: Audience;
   pillar: DesignPillar;
   ctaKind: CtaKind;
   bookingLink: string;
   dmKeyword: string;
-  // Free-form, lets a user identify the listing they're posting about
-  // without us shipping the full listings system in v1.
+  // Optional listing context — only used to shape the Claude prompt
+  // when the user wants the AI-assisted captioning path.
   listingNickname: string;
   listingCity: string;
   listingSpecs: string;
@@ -90,10 +96,12 @@ export interface OverlaySettings {
 }
 
 export const DEFAULT_SETTINGS: OverlaySettings = {
+  outputFormat: "post",
+  showProfile: true,
   audience: "local",
   pillar: "design-roi",
   ctaKind: "book-call",
-  bookingLink: "https://calendly.com/your-link",
+  bookingLink: "",
   dmKeyword: "DESIGN",
   listingNickname: "",
   listingCity: "",
@@ -102,39 +110,39 @@ export const DEFAULT_SETTINGS: OverlaySettings = {
 };
 
 export const AUDIENCE_LABELS: Record<Audience, string> = {
-  local: "San Diego owners (we design AND manage locally)",
-  remote: "Long-distance investors (we design remotely)",
+  local: "Local owners (we design & manage locally)",
+  remote: "Long-distance investors (designed remotely)",
 };
 
 export const PILLAR_LABELS: Record<DesignPillar, { label: string; definition: string }> = {
   "design-roi": {
     label: "Design ROI",
-    definition: "Why good design = more bookings, higher nightly rate, better reviews.",
+    definition: "Design → more bookings, higher ADR, better reviews.",
   },
   "before-after": {
     label: "Before / After",
-    definition: "The transformation gap between a rental and a stay.",
+    definition: "Transformation — rental → a real stay.",
   },
   "design-principle": {
     label: "Design principle",
-    definition: "One specific design decision explained (lighting, layout, texture).",
+    definition: "One specific design decision explained.",
   },
   "host-mistake": {
     label: "Host mistake",
-    definition: "An anti-pattern most owners make (e.g. furnished like a long-term rental).",
+    definition: "An anti-pattern most owners make.",
   },
   process: {
     label: "Process",
-    definition: "How we design (remote workflow, sourcing — Wayfair, Schlage Encode, Ring).",
+    definition: "How we design (remote workflow, sourcing).",
   },
   proof: {
     label: "Proof",
-    definition: "A client win, real revenue receipt, or specific result.",
+    definition: "A client win, revenue receipt, specific result.",
   },
 };
 
 export const CTA_DEFAULTS: Record<CtaKind, string> = {
   "book-call": "Book a free design call →",
-  "dm-keyword": 'DM "{KEYWORD}" for our design guide',
+  "dm-keyword": 'DM "{KEYWORD}" for the guide',
   "comment-keyword": 'Comment "{KEYWORD}" and I\'ll send the breakdown',
 };

@@ -1,18 +1,6 @@
-// Overlay Studio — the IG style presets. Each preset defines how the
-// overlay is drawn on the photo: which font, the size/weight/case,
-// default block layout, default position, and a one-line "why this
-// works" hint surfaced to the user in the auditor.
-//
-// Fonts chosen are free Google Fonts (loaded on the page) so the
-// preview matches the html-to-image export exactly:
-//   Headlines: Anton, Archivo Black, Inter 900
-//   Body:      Inter / Work Sans 500–600
-//   Accent:    Teeco yellow #FBC02D for one highlighted word
-//
-// Carousel recipe (the auditor uses this when auto-assigning roles +
-// presets across N photos): cover → 3–6 editorial/tip teaching slides
-// → 1 stat/proof → cta. The proven IG "hook → value → proof → ask"
-// arc, per the spec.
+// Overlay Studio — IG style presets for the on-photo text. Each preset
+// defines typography + placement defaults. Profile row + format size
+// are handled by OverlaySlideRender, not here.
 
 import type { PresetKey, Role } from "./overlayTypes";
 
@@ -20,18 +8,15 @@ export interface PresetDef {
   key: PresetKey;
   label: string;
   role: Role;
-  // One-line "why this works" hint shown to the user.
   why: string;
-  // Headline font + size hints used by the slide renderer.
   headlineFont: string;
-  headlineSize: number; // px at 1080×1350
+  headlineSize: number;
   headlineWeight: number;
   headlineUppercase: boolean;
-  headlineLetterSpacing: number; // em
+  headlineLetterSpacing: number;
   bodyFont: string;
   bodySize: number;
   bodyWeight: number;
-  // Default position. The auditor still lets the user override per slide.
   defaultPosition:
     | "TL"
     | "TC"
@@ -43,8 +28,6 @@ export interface PresetDef {
     | "BC"
     | "BR";
   scrim: "none" | "top" | "bottom" | "full";
-  // Extras some presets render: a giant "01" number for tip slides,
-  // a chip background for before/after labels, etc.
   numbering?: boolean;
   chip?: "before" | "after" | null;
 }
@@ -57,7 +40,7 @@ export const PRESETS: Record<PresetKey, PresetDef> = {
     key: "cover",
     label: "Cover hook",
     role: "cover",
-    why: "Slide 1 has one job: stop the scroll. Big claim, big type, high contrast.",
+    why: "Slide 1: stop the scroll. Big claim, big type.",
     headlineFont: HEADLINE_FONT,
     headlineSize: 140,
     headlineWeight: 900,
@@ -66,14 +49,14 @@ export const PRESETS: Record<PresetKey, PresetDef> = {
     bodyFont: BODY_FONT,
     bodySize: 38,
     bodyWeight: 500,
-    defaultPosition: "BL",
+    defaultPosition: "CL",
     scrim: "bottom",
   },
   editorial: {
     key: "editorial",
     label: "Editorial caption",
     role: "teach",
-    why: "Magazine-style 1–2 line caption. The text teaches; the photo carries the mood.",
+    why: "Magazine-style 1–2 line caption over the photo.",
     headlineFont: HEADLINE_FONT,
     headlineSize: 78,
     headlineWeight: 900,
@@ -82,14 +65,14 @@ export const PRESETS: Record<PresetKey, PresetDef> = {
     bodyFont: BODY_FONT,
     bodySize: 42,
     bodyWeight: 500,
-    defaultPosition: "BL",
+    defaultPosition: "CL",
     scrim: "bottom",
   },
   tip: {
     key: "tip",
     label: "Numbered tip",
     role: "teach",
-    why: "Steps + consistent placement train the viewer to swipe for the next one.",
+    why: "Numbered step with consistent placement.",
     headlineFont: HEADLINE_FONT,
     headlineSize: 78,
     headlineWeight: 900,
@@ -98,15 +81,15 @@ export const PRESETS: Record<PresetKey, PresetDef> = {
     bodyFont: BODY_FONT,
     bodySize: 38,
     bodyWeight: 500,
-    defaultPosition: "TL",
+    defaultPosition: "CL",
     scrim: "top",
     numbering: true,
   },
   "before-after": {
     key: "before-after",
-    label: "Before / After label",
+    label: "Before / After",
     role: "teach",
-    why: "A single labeled chip makes the gap obvious without crowding the photo.",
+    why: "Labeled chip; shows the transformation cleanly.",
     headlineFont: HEADLINE_FONT,
     headlineSize: 64,
     headlineWeight: 900,
@@ -115,15 +98,15 @@ export const PRESETS: Record<PresetKey, PresetDef> = {
     bodyFont: BODY_FONT,
     bodySize: 36,
     bodyWeight: 600,
-    defaultPosition: "TL",
+    defaultPosition: "CL",
     scrim: "none",
     chip: "after",
   },
   stat: {
     key: "stat",
-    label: "Stat / proof block",
+    label: "Stat / proof",
     role: "proof",
-    why: "One number, centered, owns the slide. Receipts beat adjectives.",
+    why: "One number, centered. Receipts.",
     headlineFont: HEADLINE_FONT,
     headlineSize: 180,
     headlineWeight: 900,
@@ -137,9 +120,9 @@ export const PRESETS: Record<PresetKey, PresetDef> = {
   },
   label: {
     key: "label",
-    label: "Minimal corner tag",
+    label: "Minimal tag",
     role: "proof",
-    why: "Let a strong photo breathe. A tiny tag is enough context.",
+    why: "Tiny corner label — lets the photo breathe.",
     headlineFont: BODY_FONT,
     headlineSize: 32,
     headlineWeight: 700,
@@ -155,7 +138,7 @@ export const PRESETS: Record<PresetKey, PresetDef> = {
     key: "cta",
     label: "CTA end slide",
     role: "cta",
-    why: "Close with one ask. Booking link in the first comment.",
+    why: "Close with one ask. Booking link in first comment.",
     headlineFont: HEADLINE_FONT,
     headlineSize: 110,
     headlineWeight: 900,
@@ -179,18 +162,11 @@ export const PRESET_ORDER: PresetKey[] = [
   "cta",
 ];
 
-// Given N photos, return the suggested preset for each slide so a
-// first-time poster lands on the proven "hook → value → proof → ask"
-// arc without having to think. The user can override any slide in
-// the auditor.
 export function carouselRecipe(count: number): PresetKey[] {
   if (count <= 0) return [];
   if (count === 1) return ["cover"];
   if (count === 2) return ["cover", "cta"];
   const out: PresetKey[] = ["cover"];
-  // 1 stat slide near the end (proof) + a CTA end slide. The middle
-  // fills with editorial/tip alternating so consecutive slides feel
-  // varied but not chaotic.
   const middle = Math.max(0, count - 3);
   for (let i = 0; i < middle; i++) {
     out.push(i % 2 === 0 ? "editorial" : "tip");

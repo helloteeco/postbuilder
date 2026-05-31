@@ -1,8 +1,10 @@
 "use client";
 
-// Copy the prompt → paste into Claude.ai with your photos attached →
-// paste the JSON response back here. Same loop Coach Mode uses. Zero
-// API cost.
+// Optional AI assist for headlines + body + caption. Collapsed by
+// default — the Overlay Studio is meant to work without it. If the
+// user does open it, the loop matches Coach Mode / Post Builder:
+// copy a prompt, paste it into Claude.ai with the photos attached,
+// paste the JSON response back.
 
 import { useMemo, useState } from "react";
 import {
@@ -19,7 +21,7 @@ interface Props {
   settings: OverlaySettings;
   media: OverlayMedia[];
   onMerge: (next: OverlayMedia[]) => void;
-  onCaption: (caption: string, firstComment: string, audioVibe: string) => void;
+  onCaption: (caption: string, firstComment: string) => void;
 }
 
 export default function OverlayPromptPanel({
@@ -28,101 +30,98 @@ export default function OverlayPromptPanel({
   onMerge,
   onCaption,
 }: Props) {
+  const [open, setOpen] = useState(false);
+  const [paste, setPaste] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const prompt = useMemo(
     () => buildOverlayPrompt(settings, media.length || 1),
     [settings, media.length],
   );
-  const [paste, setPaste] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   async function copyPrompt() {
     try {
       await navigator.clipboard.writeText(prompt);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      setTimeout(() => setCopied(false), 1500);
     } catch {
-      // user can still select the textarea
+      // ignore
     }
   }
 
   function applyResponse() {
     const parsed = parseOverlayResponse(paste);
     if (!parsed) {
-      setStatus("Couldn't read JSON from that. Make sure Claude returned the JSON only.");
+      setStatus("Couldn't read JSON from that — paste Claude's response only.");
       return;
     }
     onMerge(mergeParsedIntoMedia(media, parsed));
-    onCaption(parsed.caption, parsed.firstComment, parsed.audioVibe);
-    setStatus(
-      `✓ Applied ${parsed.photos.length} photo overlay${parsed.photos.length === 1 ? "" : "s"}. Caption updated.`,
-    );
+    onCaption(parsed.caption, parsed.firstComment);
+    setStatus(`✓ Applied ${parsed.photos.length} overlays. Caption updated.`);
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-        Step 4 — Write the overlays (let Claude draft)
-      </div>
-      <h2 className="mt-0.5 text-lg font-bold text-gray-900">
-        Claude.ai prompt loop
-      </h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Copy this prompt, paste it into Claude.ai{" "}
-        <strong>with your photos attached</strong>, then paste Claude&apos;s
-        JSON response into the box below. We&apos;ll fill the overlay text +
-        caption automatically. You can also skip this and type overlay text
-        by hand in the auditor — your call.
-      </p>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
-        <span className="text-[11px] text-gray-500">
-          Prompt ({prompt.length.toLocaleString()} chars)
+    <section className="rounded-lg border border-gray-200 bg-white p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <span className="text-sm font-bold text-gray-900">
+          ✨ Use AI to write the overlays (optional)
         </span>
-        <button
-          type="button"
-          onClick={copyPrompt}
-          className={`rounded px-2.5 py-1 text-xs font-semibold transition ${
-            copied
-              ? "bg-emerald-600 text-white"
-              : "bg-gray-900 text-white hover:bg-black"
-          }`}
-        >
-          {copied ? "✓ Copied" : "Copy prompt"}
-        </button>
-      </div>
-      <textarea
-        readOnly
-        value={prompt}
-        className="mt-2 h-36 w-full resize-y rounded border border-gray-300 bg-white p-2 font-mono text-[11px] text-gray-800"
-      />
-
-      <div className="mt-4 text-xs font-semibold text-gray-700">
-        Paste Claude&apos;s response below
-      </div>
-      <textarea
-        value={paste}
-        onChange={(e) => setPaste(e.target.value)}
-        rows={8}
-        placeholder='Paste the JSON Claude returned (the full {"photos": [...], "caption": "...", "firstComment": "...", "audioVibe": "..."}).'
-        className="mt-1 w-full resize-y rounded border border-gray-300 p-2 font-mono text-[11px] text-gray-800"
-      />
-      <div className="mt-2 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={applyResponse}
-          disabled={!paste.trim() || media.length === 0}
-          className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-40"
-        >
-          Apply to my photos
-        </button>
-        {status && <span className="text-xs text-gray-600">{status}</span>}
-      </div>
-
-      <p className="mt-3 text-[11px] text-gray-500">
-        Tip: if Claude returns text around the JSON, that&apos;s fine — we
-        find the JSON inside automatically.
-      </p>
+        <span className="text-xs text-gray-500">{open ? "Hide ▴" : "Show ▾"}</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-gray-600">
+            Copy the prompt → paste into Claude.ai{" "}
+            <strong>with your photos attached</strong> → paste the JSON
+            response back. Or skip it and type headlines yourself in each
+            slide card.
+          </p>
+          <div className="flex items-center justify-between gap-2 rounded border border-gray-200 bg-gray-50 p-2">
+            <span className="text-[11px] text-gray-500">
+              {prompt.length.toLocaleString()} chars
+            </span>
+            <button
+              type="button"
+              onClick={copyPrompt}
+              className={`rounded px-2 py-1 text-xs font-semibold transition ${
+                copied
+                  ? "bg-emerald-600 text-white"
+                  : "bg-gray-900 text-white hover:bg-black"
+              }`}
+            >
+              {copied ? "✓ Copied" : "Copy prompt"}
+            </button>
+          </div>
+          <textarea
+            readOnly
+            value={prompt}
+            className="h-28 w-full resize-y rounded border border-gray-300 bg-gray-50 p-2 font-mono text-[11px] text-gray-800"
+          />
+          <textarea
+            value={paste}
+            onChange={(e) => setPaste(e.target.value)}
+            rows={5}
+            placeholder="Paste Claude's JSON response here."
+            className="w-full resize-y rounded border border-gray-300 p-2 font-mono text-[11px] text-gray-800"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={applyResponse}
+              disabled={!paste.trim() || media.length === 0}
+              className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-40"
+            >
+              Apply to my photos
+            </button>
+            {status && <span className="text-xs text-gray-600">{status}</span>}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

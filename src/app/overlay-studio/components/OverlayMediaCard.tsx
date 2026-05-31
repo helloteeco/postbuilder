@@ -1,26 +1,29 @@
 "use client";
 
-// Per-photo audit row: preview on the left, controls on the right.
-// Controls cover the 9-position grid, color, scrim toggle, preset
-// picker, reorder, delete. Headline + body live underneath so they
-// have room to breathe across the full card width.
+// Per-photo editor. Live preview on the left, controls on the right.
+// Body field is the "what do you want this image to say" copy — it's
+// the description that appears under the headline on the photo AND
+// gets folded into the post caption.
 
-import OverlaySlideRender, {
-  SLIDE_H,
-  SLIDE_W,
-} from "./OverlaySlideRender";
+import OverlaySlideRender from "./OverlaySlideRender";
 import { PRESETS, PRESET_ORDER } from "@/app/overlay-studio/lib/overlayPresets";
-import type {
-  OverlayMedia,
-  PresetKey,
-  Position,
-  TextColor,
+import {
+  OUTPUT_DIMENSIONS,
+  type OutputFormat,
+  type OverlayMedia,
+  type Position,
+  type PresetKey,
+  type TextColor,
 } from "@/app/overlay-studio/lib/overlayTypes";
+import type { PostBuilderProfile } from "@/lib/post-templates";
 
 interface Props {
   media: OverlayMedia;
   index: number;
   total: number;
+  format: OutputFormat;
+  profile: PostBuilderProfile;
+  showProfile: boolean;
   onChange: (patch: Partial<OverlayMedia>) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -28,31 +31,33 @@ interface Props {
 }
 
 const PREVIEW_W = 220;
-const PREVIEW_SCALE = PREVIEW_W / SLIDE_W;
-const PREVIEW_H = SLIDE_H * PREVIEW_SCALE;
-
 const POSITIONS: Position[] = [
   "TL", "TC", "TR",
   "CL", "CC", "CR",
   "BL", "BC", "BR",
 ];
-
-const COLOR_SWATCHES: Array<{ k: TextColor; bg: string; ring: string }> = [
-  { k: "light", bg: "#FFFFFF", ring: "#0A0A0A" },
-  { k: "dark", bg: "#0A0A0A", ring: "#FFFFFF" },
-  { k: "yellow", bg: "#FBC02D", ring: "#0A0A0A" },
+const COLOR_SWATCHES: Array<{ k: TextColor; bg: string }> = [
+  { k: "light", bg: "#FFFFFF" },
+  { k: "dark", bg: "#0A0A0A" },
+  { k: "yellow", bg: "#FBC02D" },
 ];
 
 export default function OverlayMediaCard({
   media,
   index,
   total,
+  format,
+  profile,
+  showProfile,
   onChange,
   onMoveUp,
   onMoveDown,
   onDelete,
 }: Props) {
   const preset = PRESETS[media.preset];
+  const dim = OUTPUT_DIMENSIONS[format];
+  const scale = PREVIEW_W / dim.w;
+  const previewH = dim.h * scale;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
@@ -91,11 +96,10 @@ export default function OverlayMediaCard({
       </div>
 
       <div className="mt-2 flex flex-wrap gap-3">
-        {/* Preview */}
         <div
           style={{
             width: PREVIEW_W,
-            height: PREVIEW_H,
+            height: previewH,
             overflow: "hidden",
             borderRadius: 10,
             flexShrink: 0,
@@ -103,12 +107,14 @@ export default function OverlayMediaCard({
         >
           <OverlaySlideRender
             media={media}
+            format={format}
             slideNumber={index + 1}
-            scale={PREVIEW_SCALE}
+            profile={profile}
+            showProfile={showProfile}
+            scale={scale}
           />
         </div>
 
-        {/* Controls */}
         <div className="flex min-w-[260px] flex-1 flex-col gap-2">
           <label className="text-[11px] text-gray-600">
             Style
@@ -131,7 +137,7 @@ export default function OverlayMediaCard({
           </label>
 
           <div>
-            <div className="text-[11px] text-gray-600">Position</div>
+            <div className="text-[11px] text-gray-600">Text position</div>
             <div className="mt-0.5 grid grid-cols-3 gap-0.5">
               {POSITIONS.map((p) => {
                 const active = p === media.position;
@@ -189,7 +195,7 @@ export default function OverlayMediaCard({
 
       <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
         <label className="text-[11px] text-gray-600">
-          Headline (≤ 6 words)
+          Headline on the photo (≤6 words)
           <input
             type="text"
             value={media.headline}
@@ -205,12 +211,12 @@ export default function OverlayMediaCard({
           )}
         </label>
         <label className="text-[11px] text-gray-600">
-          Body (1–2 lines, skimmable)
+          What this image should say (description — also goes in the caption)
           <textarea
             value={media.body}
             onChange={(e) => onChange({ body: e.target.value })}
             rows={2}
-            placeholder="One descriptive line that teaches the point."
+            placeholder="One short line about this photo. Feeds the caption too."
             className="mt-0.5 w-full resize-y rounded border border-gray-300 px-2 py-1 text-xs"
           />
         </label>

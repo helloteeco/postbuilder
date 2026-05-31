@@ -1,70 +1,82 @@
 "use client";
 
-// Caption + first comment + audio-vibe suggestion. Editable. Copies
-// included so the user can grab each piece individually when posting
-// (Instagram makes you paste caption + first comment separately).
+// Compact caption panel. Auto-composed from each photo's body text +
+// the chosen CTA, OR replaced by Claude's response. Always editable.
 
 import { useState } from "react";
+import {
+  CTA_DEFAULTS,
+  type OverlaySettings,
+} from "@/app/overlay-studio/lib/overlayTypes";
+import type { OverlayMedia } from "@/app/overlay-studio/lib/overlayTypes";
 
 interface Props {
+  media: OverlayMedia[];
+  settings: OverlaySettings;
   caption: string;
   firstComment: string;
-  audioVibe: string;
-  onChange: (next: {
-    caption: string;
-    firstComment: string;
-    audioVibe: string;
-  }) => void;
+  onChange: (next: { caption: string; firstComment: string }) => void;
 }
 
 export default function OverlayCaptionPanel({
+  media,
+  settings,
   caption,
   firstComment,
-  audioVibe,
   onChange,
 }: Props) {
-  function patch<K extends "caption" | "firstComment" | "audioVibe">(
-    k: K,
-    v: string,
-  ) {
-    onChange({ caption, firstComment, audioVibe, [k]: v });
+  const [copied, setCopied] = useState<"cap" | "fc" | null>(null);
+
+  function compose() {
+    onChange({
+      caption: composeCaption(media, settings),
+      firstComment: composeFirstComment(settings),
+    });
+  }
+
+  async function copy(field: "cap" | "fc", value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(field);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      // ignore
+    }
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-        Step 7 — Caption + first comment
+    <section className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-sm font-bold text-gray-900">Caption</div>
+        <button
+          type="button"
+          onClick={compose}
+          disabled={media.length === 0}
+          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-40"
+          title="Build the caption from each photo's description + your CTA"
+        >
+          Auto-build from photo descriptions
+        </button>
       </div>
-      <h2 className="mt-0.5 text-lg font-bold text-gray-900">
-        Copy this when you post
-      </h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Caption goes in the main caption box on Instagram. First comment
-        keeps the booking link out of the caption (cleaner + algorithm
-        likes it). Music is the last step on your phone.
-      </p>
 
-      <div className="mt-3 space-y-3">
-        <FieldBlock
-          label="Caption"
-          value={caption}
-          onChange={(v) => patch("caption", v)}
-          rows={5}
-          placeholder="Generated when you Apply Claude's response."
-        />
+      <FieldBlock
+        label="Caption"
+        value={caption}
+        onChange={(v) => onChange({ caption: v, firstComment })}
+        rows={5}
+        placeholder="Each photo's description joins here. Or paste Claude's response."
+        copied={copied === "cap"}
+        onCopy={() => copy("cap", caption)}
+      />
+      <div className="mt-3">
         <FieldBlock
           label="First comment"
           value={firstComment}
-          onChange={(v) => patch("firstComment", v)}
+          onChange={(v) => onChange({ caption, firstComment: v })}
           rows={2}
-          placeholder="One line reinforcing the CTA + the booking link."
-        />
-        <FieldBlock
-          label="Suggested music vibe"
-          value={audioVibe}
-          onChange={(v) => patch("audioVibe", v)}
-          rows={1}
-          placeholder='e.g. "calm home-tour / aesthetic lo-fi"'
+          placeholder="The booking link goes here, not in the caption."
+          copied={copied === "fc"}
+          onCopy={() => copy("fc", firstComment)}
         />
       </div>
     </section>
@@ -77,32 +89,26 @@ function FieldBlock({
   onChange,
   rows,
   placeholder,
+  copied,
+  onCopy,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   rows: number;
   placeholder?: string;
+  copied: boolean;
+  onCopy: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // ignore
-    }
-  }
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+    <div>
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
           {label}
         </span>
         <button
           type="button"
-          onClick={copy}
+          onClick={onCopy}
           disabled={!value}
           className={`rounded px-2 py-0.5 text-[11px] font-semibold transition disabled:opacity-30 ${
             copied
@@ -122,4 +128,34 @@ function FieldBlock({
       />
     </div>
   );
+}
+
+// Stitch the user's per-photo descriptions into a caption, finished
+// with the chosen CTA. Cover slide's headline opens it.
+export function composeCaption(media: OverlayMedia[], s: OverlaySettings): string {
+  if (media.length === 0) return "";
+  const cover = media[0];
+  const open = cover.headline ? `${cover.headline}.` : "";
+  const descriptions = media
+    .map((m) => m.body.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  const cta = composeCtaLine(s);
+  return [open, descriptions, cta].filter(Boolean).join("\n\n");
+}
+
+export function composeFirstComment(s: OverlaySettings): string {
+  if (s.ctaKind === "book-call" && s.bookingLink) {
+    return `Book a free design call → ${s.bookingLink}`;
+  }
+  return composeCtaLine(s);
+}
+
+function composeCtaLine(s: OverlaySettings): string {
+  const tmpl = CTA_DEFAULTS[s.ctaKind];
+  const filled = tmpl.replace("{KEYWORD}", s.dmKeyword || "DESIGN");
+  if (s.ctaKind === "book-call" && s.bookingLink) {
+    return `${filled} ${s.bookingLink}`;
+  }
+  return filled;
 }

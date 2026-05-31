@@ -1,26 +1,37 @@
 "use client";
 
-// OverlaySlideRender — single source of truth for what a slide looks
-// like. Used both for the live in-page preview AND for the offscreen
-// 1080×1350 export node. Because both use the same React tree, the
-// exported PNG matches the preview pixel-for-pixel (the spec's Phase 1
-// acceptance criterion).
+// OverlaySlideRender — the single source of truth for what a slide
+// looks like in both the live preview and the exported PNG.
 //
-// We render at the native 1080×1350 size with a CSS transform scale
-// when the parent passes `scale`. html-to-image captures the inner
-// 1080×1350 frame, transform-independent.
+// Supports two output canvases via the `format` prop:
+//   "post" → 1080×1350 (IG carousel / matches Post Builder)
+//   "reel" → 1080×1920 (IG reel cover / matches Reel Builder)
+//
+// Draws (bottom-up):
+//   1. The user's photo (object-cover full-bleed).
+//   2. A scrim gradient when the preset asks for one — keeps text
+//      legible without competing with the photo.
+//   3. The text overlay (headline + body) anchored by the 9-position
+//      grid, padded by the safe-zone insets.
+//   4. An optional compact profile row in the top-right corner: the
+//      same avatar/name/blue-check/handle the rest of the app uses
+//      (postBuilder.profile). Positioned in the corner OPPOSITE the
+//      text block so they never collide.
 
 import { forwardRef } from "react";
+import type { PostBuilderProfile } from "@/lib/post-templates";
 import { PRESETS } from "@/app/overlay-studio/lib/overlayPresets";
-import type { OverlayMedia, Position } from "@/app/overlay-studio/lib/overlayTypes";
-
-export const SLIDE_W = 1080;
-export const SLIDE_H = 1350;
+import {
+  OUTPUT_DIMENSIONS,
+  type OutputFormat,
+  type OverlayMedia,
+  type Position,
+} from "@/app/overlay-studio/lib/overlayTypes";
 
 const SAFE = {
   top: 0.06,
   side: 0.06,
-  bottom: 0.14, // IG caption peek sits here — leave room.
+  bottom: 0.14, // IG caption peek sits here.
 };
 
 const TEXT_COLORS = {
@@ -29,50 +40,41 @@ const TEXT_COLORS = {
   yellow: "#FBC02D",
 };
 
-// Soft drop shadow on light text so it survives a busy background even
-// without a scrim. Tuned per spec ("soft shadow when text is light").
 const LIGHT_SHADOW = "0 4px 24px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.6)";
 
 interface Props {
   media: OverlayMedia;
-  // The carousel position number this slide will live at (1-based) —
-  // shown by the tip preset.
+  format: OutputFormat;
   slideNumber: number;
-  // When set, the whole 1080×1350 node is CSS-scaled. Use null/undefined
-  // for the offscreen export node.
+  profile: PostBuilderProfile;
+  showProfile: boolean;
   scale?: number;
 }
 
 const OverlaySlideRender = forwardRef<HTMLDivElement, Props>(function OverlaySlideRender(
-  { media, slideNumber, scale },
+  { media, format, slideNumber, profile, showProfile, scale },
   ref,
 ) {
+  const dim = OUTPUT_DIMENSIONS[format];
   const preset = PRESETS[media.preset];
   const transform = scale ? `scale(${scale})` : undefined;
   const color = TEXT_COLORS[media.textColor];
   const shadow = media.textColor === "light" ? LIGHT_SHADOW : undefined;
-
-  // Position → flex anchor + text-align. The 9-position grid maps
-  // top/center/bottom to vertical anchor and L/C/R to horizontal +
-  // text alignment.
   const { vAlign, hAlign, textAlign } = positionToFlex(media.position);
+  const scrim = media.scrim ? scrimStyle(preset.scrim) : null;
 
-  // Scrim gradient — drawn as an absolutely positioned overlay between
-  // the photo and the text. Always darker than the underlying image so
-  // text stays legible.
-  const scrim = scrimStyle(preset.scrim);
-
-  // "01" leading number for tip-preset slides.
-  const showNumbering = !!preset.numbering;
-  // BEFORE / AFTER chip for the before/after preset.
-  const showChip = !!preset.chip;
+  // Anchor the profile chip to the opposite vertical band from the
+  // text — text at top → profile at bottom-right and vice versa. Keeps
+  // them from fighting for the same pixels.
+  const textIsTop = media.position.startsWith("T");
+  const profileAnchor: "top" | "bottom" = textIsTop ? "bottom" : "top";
 
   return (
     <div
       ref={ref}
       style={{
-        width: SLIDE_W,
-        height: SLIDE_H,
+        width: dim.w,
+        height: dim.h,
         position: "relative",
         overflow: "hidden",
         background: "#111",
@@ -80,7 +82,7 @@ const OverlaySlideRender = forwardRef<HTMLDivElement, Props>(function OverlaySli
         transformOrigin: "top left",
       }}
     >
-      {/* Photo */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={media.dataUrl}
         alt=""
@@ -94,16 +96,14 @@ const OverlaySlideRender = forwardRef<HTMLDivElement, Props>(function OverlaySli
         }}
       />
 
-      {/* Scrim */}
       {scrim && <div style={{ position: "absolute", inset: 0, ...scrim }} />}
 
-      {/* Before/After chip in the opposite corner of the text */}
-      {showChip && (
+      {preset.chip && (
         <div
           style={{
             position: "absolute",
-            top: SLIDE_H * SAFE.top,
-            right: SLIDE_W * SAFE.side,
+            top: dim.h * SAFE.top,
+            right: dim.w * SAFE.side,
             background: "#FBC02D",
             color: "#0A0A0A",
             padding: "10px 22px",
@@ -112,18 +112,28 @@ const OverlaySlideRender = forwardRef<HTMLDivElement, Props>(function OverlaySli
             fontSize: 38,
             letterSpacing: 4,
             textTransform: "uppercase",
+            zIndex: 2,
           }}
         >
           AFTER
         </div>
       )}
 
-      {/* Text block — anchored by position, padded by SAFE insets */}
+      {/* Profile chip — small compact strip, opposite corner from text */}
+      {showProfile && (
+        <OverlayProfileChip
+          profile={profile}
+          anchor={profileAnchor}
+          canvas={dim}
+        />
+      )}
+
+      {/* Text block */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          padding: `${SLIDE_H * SAFE.top}px ${SLIDE_W * SAFE.side}px ${SLIDE_H * SAFE.bottom}px ${SLIDE_W * SAFE.side}px`,
+          padding: `${dim.h * SAFE.top}px ${dim.w * SAFE.side}px ${dim.h * SAFE.bottom}px ${dim.w * SAFE.side}px`,
           display: "flex",
           flexDirection: "column",
           justifyContent: vAlign,
@@ -134,7 +144,7 @@ const OverlaySlideRender = forwardRef<HTMLDivElement, Props>(function OverlaySli
           gap: 18,
         }}
       >
-        {showNumbering && (
+        {preset.numbering && (
           <div
             style={{
               fontFamily: preset.headlineFont,
@@ -189,13 +199,111 @@ const OverlaySlideRender = forwardRef<HTMLDivElement, Props>(function OverlaySli
 
 export default OverlaySlideRender;
 
+function OverlayProfileChip({
+  profile,
+  anchor,
+  canvas,
+}: {
+  profile: PostBuilderProfile;
+  anchor: "top" | "bottom";
+  canvas: { w: number; h: number };
+}) {
+  const avatar = 78;
+  const fallbackInitial = profile.displayName.trim().charAt(0).toUpperCase() || "?";
+  const padX = canvas.w * 0.05;
+  const padY = canvas.h * 0.04;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        ...(anchor === "top"
+          ? { top: padY }
+          : { bottom: padY * 1.2 }),
+        right: padX,
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "10px 16px 10px 10px",
+        borderRadius: 999,
+        background: "rgba(0,0,0,0.45)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        zIndex: 3,
+      }}
+    >
+      <div
+        style={{
+          width: avatar,
+          height: avatar,
+          borderRadius: "50%",
+          overflow: "hidden",
+          background:
+            "linear-gradient(145deg, #F5B935 0%, #E8A420 50%, #D99013 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#fff",
+          fontSize: 32,
+          fontWeight: 700,
+          flexShrink: 0,
+        }}
+      >
+        {profile.avatarDataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={profile.avatarDataUrl}
+            alt=""
+            crossOrigin="anonymous"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          fallbackInitial
+        )}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", color: "#fff" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 28,
+            fontWeight: 700,
+            lineHeight: 1.1,
+          }}
+        >
+          <span>{profile.displayName || "Your Name"}</span>
+          {profile.verified && <VerifiedCheck size={28} />}
+        </div>
+        <div style={{ fontSize: 22, opacity: 0.85, lineHeight: 1.1 }}>
+          {profile.handle || "@yourhandle"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VerifiedCheck({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden style={{ flexShrink: 0 }}>
+      <path
+        fill="#1D9BF0"
+        d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z"
+      />
+      <path
+        fill="#FFFFFF"
+        d="M9.71 17.18 5.6 13.06l1.41-1.42 2.71 2.71 6.6-6.6 1.41 1.41z"
+      />
+    </svg>
+  );
+}
+
 function positionToFlex(p: Position): {
   vAlign: "flex-start" | "center" | "flex-end";
   hAlign: "flex-start" | "center" | "flex-end";
   textAlign: "left" | "center" | "right";
 } {
-  const v = p[0]; // T/C/B
-  const h = p[1]; // L/C/R
+  const v = p[0];
+  const h = p[1];
   return {
     vAlign: v === "T" ? "flex-start" : v === "B" ? "flex-end" : "center",
     hAlign: h === "L" ? "flex-start" : h === "R" ? "flex-end" : "center",
@@ -219,6 +327,5 @@ function scrimStyle(
         "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 35%, rgba(0,0,0,0) 65%)",
     };
   }
-  // full
   return { background: "rgba(0,0,0,0.45)" };
 }
