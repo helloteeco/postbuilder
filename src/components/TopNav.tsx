@@ -1,6 +1,6 @@
-// Top navigation bar shown above every page. Three links: Post Builder
-// (/post-builder), Reel Builder (/reel-builder), Coach Mode (/coach).
-// The active route gets a dark underline.
+// Top navigation bar shown above every page. Links: Post Builder
+// (/post-builder), Reel Builder (/reel-builder), Coach Mode (/coach),
+// Ad Coach (/ad-coach, beta). The active route gets a dark underline.
 
 "use client";
 
@@ -8,9 +8,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
-  { href: "/post-builder", label: "Post Builder" },
-  { href: "/reel-builder", label: "Reel Builder" },
-  { href: "/coach", label: "Coach Mode" },
+  { href: "/post-builder", label: "Post Builder", beta: false },
+  { href: "/reel-builder", label: "Reel Builder", beta: false },
+  { href: "/coach", label: "Coach Mode", beta: false },
+  { href: "/ad-coach", label: "Ad Coach", beta: true },
 ] as const;
 
 export default function TopNav() {
@@ -32,13 +33,18 @@ export default function TopNav() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded px-3 py-1.5 text-sm transition ${
+                className={`flex items-center gap-1 rounded px-3 py-1.5 text-sm transition ${
                   active
                     ? "border-b-2 border-gray-900 font-semibold text-gray-900"
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
                 {link.label}
+                {link.beta && (
+                  <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-indigo-700">
+                    Beta
+                  </span>
+                )}
               </Link>
             );
           })}
