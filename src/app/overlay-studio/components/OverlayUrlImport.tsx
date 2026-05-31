@@ -33,14 +33,23 @@ type Pick = "top10" | "all";
 
 interface FetchOk {
   ok: true;
-  result: { source: string; host: string; urls: string[] };
+  result: {
+    source: string;
+    host: string;
+    urls: string[];
+    setupNeeded?: boolean;
+  };
 }
 interface FetchErr {
   ok: false;
   code: string;
   message: string;
+  setupNeeded?: boolean;
 }
 type FetchResp = FetchOk | FetchErr;
+
+const SETUP_HINT =
+  "Tip: Airbnb hides the gallery behind JS — set SCRAPINGBEE_API_KEY in Vercel (free tier covers ~40 listings/mo) and you'll get all ~30 photos per listing instead of just the hero shot.";
 
 export default function OverlayUrlImport({ media, format, onSet }: Props) {
   const [url, setUrl] = useState("");
@@ -64,7 +73,8 @@ export default function OverlayUrlImport({ media, format, onSet }: Props) {
       });
       const data = (await resp.json()) as FetchResp;
       if (!data.ok) {
-        setStatus(`${data.code}: ${data.message}`);
+        const hint = data.setupNeeded ? `\n\n${SETUP_HINT}` : "";
+        setStatus(`${data.code}: ${data.message}${hint}`);
         return;
       }
       const candidates = data.result.urls;
@@ -72,7 +82,16 @@ export default function OverlayUrlImport({ media, format, onSet }: Props) {
         setStatus("No photos found on that page.");
         return;
       }
-      setStatus(`Found ${candidates.length} photo${candidates.length === 1 ? "" : "s"}. Downloading…`);
+      // Thin result + no rendering proxy = SSR shell. Tell the user.
+      if (candidates.length < 5 && data.result.setupNeeded) {
+        setStatus(
+          `Found only ${candidates.length} photo${candidates.length === 1 ? "" : "s"} (Airbnb served a stripped shell). Downloading anyway…\n\n${SETUP_HINT}`,
+        );
+      } else {
+        setStatus(
+          `Found ${candidates.length} photo${candidates.length === 1 ? "" : "s"}. Downloading…`,
+        );
+      }
 
       const dim = OUTPUT_DIMENSIONS[format];
       const targetAspect = dim.w / dim.h;

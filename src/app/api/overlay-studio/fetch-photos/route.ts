@@ -27,6 +27,7 @@ interface FetchResult {
   host: string;
   listingId: string | null;
   urls: string[];
+  setupNeeded: boolean;
 }
 
 const AIRBNB_HOST_RE = /(^|\.)airbnb\.[a-z.]+$/i;
@@ -175,7 +176,37 @@ function variantScore(u: string): number {
   return s;
 }
 
+// Airbnb actively serves a stripped React shell to plain server
+// fetches (their full photo gallery is hydrated client-side). To get
+// the rendered HTML we route through ScrapingBee, a managed headless-
+// Chrome proxy. If SCRAPINGBEE_API_KEY isn't set we fall back to a
+// direct fetch — it usually returns only 1 hero shot, and the route
+// will tell the UI to surface a setup hint.
+function hasScrapingBee(): boolean {
+  return !!process.env.SCRAPINGBEE_API_KEY;
+}
+
 async function fetchAirbnbHtml(url: string): Promise<string | null> {
+  const key = process.env.SCRAPINGBEE_API_KEY;
+  if (key) {
+    // render_js=true tells ScrapingBee to spin up real Chrome so the
+    // Apollo cache fully hydrates. premium_proxy=true rotates through
+    // residential IPs so Airbnb doesn't 403 us. country_code=us keeps
+    // listings/pricing in the locale the user expects.
+    const target = `https://app.scrapingbee.com/api/v1/?api_key=${encodeURIComponent(
+      key,
+    )}&url=${encodeURIComponent(url)}&render_js=true&premium_proxy=true&country_code=us&wait=2000`;
+    try {
+      const resp = await fetch(target, {
+        signal: AbortSignal.timeout(28_000),
+      });
+      if (!resp.ok) return null;
+      return await resp.text();
+    } catch {
+      return null;
+    }
+  }
+  // No proxy configured — best-effort direct fetch.
   try {
     const resp = await fetch(url, {
       headers: {
@@ -299,13 +330,17 @@ export async function POST(req: Request) {
 
   const combined = dedupeAndPickLargest([...jsonLdHits, ...blobHits, ...rawHits]);
 
+  const setupNeeded = !hasScrapingBee();
+
   if (combined.length === 0) {
     return NextResponse.json(
       {
         ok: false,
-        code: "NO_PHOTOS",
-        message:
-          "Couldn't find listing photos in that page. Airbnb sometimes serves a stripped shell — try again, or take screenshots from 'Show all photos' instead.",
+        code: setupNeeded ? "SETUP_NEEDED" : "NO_PHOTOS",
+        message: setupNeeded
+          ? "Airbnb served a stripped page (their gallery is rendered by JavaScript). Set SCRAPINGBEE_API_KEY in Vercel env vars to import the full gallery — free tier covers ~40 listings/month."
+          : "Couldn't find listing photos. The listing may be private, regionally blocked, or in a layout we don't recognize yet.",
+        setupNeeded,
       },
       { status: 422 },
     );
@@ -318,6 +353,7 @@ export async function POST(req: Request) {
       host: parsed.hostname,
       listingId: classified.id,
       urls: combined,
+      setupNeeded,
     } satisfies FetchResult,
   });
 }
