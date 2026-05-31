@@ -27,6 +27,15 @@ import {
   type OverlayMedia,
   type OverlaySettings,
 } from "@/app/overlay-studio/lib/overlayTypes";
+import {
+  compressMediaForHistory,
+  deleteOverlayHistory,
+  loadOverlayHistory,
+  promoteOverlayHistory,
+  pushOverlayHistory,
+  updateCurrentOverlayHistory,
+  type SavedOverlayBatch,
+} from "@/app/overlay-studio/lib/overlayHistory";
 import OverlaySetupPanel from "./components/OverlaySetupPanel";
 import OverlayUpload from "./components/OverlayUpload";
 import OverlayUrlImport from "./components/OverlayUrlImport";
@@ -35,6 +44,7 @@ import OverlayMediaCard from "./components/OverlayMediaCard";
 import OverlaySlideRender from "./components/OverlaySlideRender";
 import OverlayCaptionPanel from "./components/OverlayCaptionPanel";
 import OverlayExportBar from "./components/OverlayExportBar";
+import RecentOverlays from "./components/RecentOverlays";
 
 // Loaded for canvas-accurate export (preview + zip share the same DOM).
 const FONT_CSS = `
@@ -50,6 +60,8 @@ export default function OverlayStudioPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [firstComment, setFirstComment] = useState("");
+  const [history, setHistory] = useState<SavedOverlayBatch[]>([]);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
 
   // Offscreen full-size export refs, one per slide.
   const exportRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -59,11 +71,84 @@ export default function OverlayStudioPage() {
     ensureChannelsInitialized();
     installCustomData();
     setSettings(loadSettings());
+    setHistory(loadOverlayHistory());
   }, []);
 
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  // Ref-guarded so a same-tick race (push + caption keystroke) can't
+  // create two entries before activeHistoryId propagates.
+  const pushingRef = useRef(false);
+
+  // Clear the active batch id whenever media empties — a subsequent
+  // upload should start a brand-new batch, not overwrite the previous.
+  useEffect(() => {
+    if (media.length === 0 && activeHistoryId) {
+      setActiveHistoryId(null);
+    }
+  }, [media.length, activeHistoryId]);
+
+  // Auto-push: first photo of a fresh session creates a new history
+  // entry; subsequent edits debounce-update it in place.
+  useEffect(() => {
+    if (media.length === 0 || activeHistoryId || pushingRef.current) return;
+    pushingRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const compressed = await compressMediaForHistory(media);
+      if (cancelled) {
+        pushingRef.current = false;
+        return;
+      }
+      const entry = pushOverlayHistory(
+        compressed,
+        caption,
+        firstComment,
+        settings,
+      );
+      setActiveHistoryId(entry.id);
+      setHistory(loadOverlayHistory());
+      pushingRef.current = false;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [media, activeHistoryId, caption, firstComment, settings]);
+
+  // Debounced in-place save while the user edits the current batch.
+  useEffect(() => {
+    if (!activeHistoryId || media.length === 0) return;
+    const t = setTimeout(async () => {
+      const compressed = await compressMediaForHistory(media);
+      updateCurrentOverlayHistory({
+        media: compressed,
+        caption,
+        firstComment,
+        settings,
+      });
+      setHistory(loadOverlayHistory());
+    }, 1400);
+    return () => clearTimeout(t);
+  }, [media, caption, firstComment, settings, activeHistoryId]);
+
+  function handleLoadHistoryEntry(entry: SavedOverlayBatch) {
+    const next = promoteOverlayHistory(entry.id);
+    setHistory(next);
+    setMedia(entry.media);
+    setCaption(entry.caption);
+    setFirstComment(entry.firstComment);
+    setSettings(entry.settings);
+    setSelectedId(entry.media[0]?.id ?? null);
+    setActiveHistoryId(entry.id);
+  }
+
+  function handleDeleteHistoryEntry(id: string) {
+    const next = deleteOverlayHistory(id);
+    setHistory(next);
+    if (activeHistoryId === id) setActiveHistoryId(null);
+  }
 
   // Keep the selected slide in sync with the media list.
   useEffect(() => {
@@ -149,6 +234,12 @@ export default function OverlayStudioPage() {
         </aside>
 
         <section className="space-y-4">
+          <RecentOverlays
+            history={history}
+            activeId={activeHistoryId}
+            onLoad={handleLoadHistoryEntry}
+            onDelete={handleDeleteHistoryEntry}
+          />
           {/* Slide preview grid — same shape as Post Builder's grid */}
           <div className="rounded-lg border border-gray-200 bg-white p-4">
             <div className="mb-2 flex items-center justify-between">
