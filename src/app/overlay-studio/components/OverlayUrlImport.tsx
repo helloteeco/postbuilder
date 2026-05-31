@@ -144,21 +144,22 @@ export default function OverlayUrlImport({ media, format, onSet }: Props) {
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
         <div className="text-sm font-bold text-gray-900">
-          From a listing link
+          From an Airbnb listing
         </div>
         <span className="text-[10px] uppercase tracking-wider text-gray-400">
-          Airbnb · any page
+          Airbnb only
         </span>
       </div>
       <p className="mb-2 text-[11px] text-gray-600">
-        Paste an Airbnb URL (or any listing page). We&apos;ll pull the photos,
-        score them for sharpness + lighting, and keep your pick.
+        Paste a listing URL (the one with <code>/rooms/</code> in it). We pull
+        only the photos from <em>Show all photos</em> — no host avatars,
+        AirCover graphics, or icons.
       </p>
       <input
         type="url"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        placeholder="https://www.airbnb.com/rooms/…"
+        placeholder="https://www.airbnb.com/rooms/12345678"
         disabled={busy}
         className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
       />

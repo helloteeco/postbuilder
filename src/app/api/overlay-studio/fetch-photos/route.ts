@@ -3,43 +3,44 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-// Pulls candidate photo URLs out of any pasted listing URL. Two
-// strategies live here: an Airbnb-aware pass (their CDN domain +
-// embedded JSON deferred state) and a generic-page fallback (every
-// <img>, every og:image, every <source srcset>). The client then
-// decides what to actually download via /api/proxy-image and scores
-// them locally for sharpness / brightness / aspect.
+// Pulls photos from a pasted Airbnb LISTING URL only. The earlier
+// "any page works" mode kept dragging in host avatars, AirCover
+// graphics, and amenity icons, so this version is intentionally
+// strict:
 //
-// Anti-bot reality: Airbnb's full-page DOM is React-hydrated, but
-// they DO inline a "deferred state" JSON blob in the SSR'd HTML that
-// contains every photo URL on a0.muscache.com. We grep that blob
-// (plus the og:image meta) — no headless browser needed.
+//   1. Hostname must be airbnb.*  (404 anything else).
+//   2. Path must look like a real listing (/rooms/<id>, /h/<slug>,
+//      /luxury/listing/<id>) — bail on search / wishlist / experience
+//      pages.
+//   3. Photos come from two listing-specific sources only:
+//        - The JSON-LD <script type="application/ld+json"> block.
+//          Schema.org Product / LodgingBusiness has an `image` array
+//          that is exactly the listing's "Show all photos" gallery.
+//        - The hosting-photo URL pattern on Airbnb's CDN — paths that
+//          contain /im/pictures/miso/Hosting-, /im/pictures/hosting/,
+//          or /im/pictures/lombard/ are listing photos. Everything
+//          else on muscache (user/, aircover/, icons/, badges/, etc.)
+//          is skipped.
 
 interface FetchResult {
-  source: "airbnb" | "generic";
+  source: "airbnb";
   host: string;
+  listingId: string | null;
   urls: string[];
 }
 
 const AIRBNB_HOST_RE = /(^|\.)airbnb\.[a-z.]+$/i;
-const AIRBNB_CDN_RE =
-  /https?:\/\/a0\.muscache\.com\/im\/pictures\/[a-z0-9\-\/_.]+\.(?:jpe?g|png|webp)(?:\?[^"'\s]*)?/gi;
+const AIRBNB_LISTING_PATH_RE =
+  /^\/(?:rooms|h|luxury\/listing)\/(?:plus\/|listings\/)?([^/?#]+)/i;
 
-// Generic catch-all. Pulls every reasonable image URL out of HTML —
-// <img src>, <img srcset>, <source srcset>, og:image, twitter:image,
-// link rel=image_src, and JSON-LD "image" fields. Caller filters /
-// dedupes.
-const IMG_TAG_RE = /<img\b[^>]*>/gi;
-const SOURCE_TAG_RE = /<source\b[^>]*>/gi;
-const SRC_ATTR_RE = /\bsrc=["']([^"']+)["']/i;
-const SRCSET_ATTR_RE = /\bsrcset=["']([^"']+)["']/i;
-const META_IMAGE_RE =
-  /<meta[^>]+(?:property|name)=["'](?:og:image(?::secure_url|:url)?|twitter:image(?::src)?)["'][^>]+content=["']([^"']+)["']/gi;
-const META_IMAGE_REV_RE =
-  /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image(?::secure_url|:url)?|twitter:image(?::src)?)["']/gi;
-const LINK_IMAGE_RE =
-  /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["']/gi;
-const JSONLD_IMAGE_RE = /"image"\s*:\s*("[^"]+"|\[[^\]]+\])/gi;
+// Real listing photos live under specific path segments. Anything
+// outside this set (user avatars, aircover, badges, illustrations) is
+// noise.
+const HOSTING_PHOTO_RE =
+  /https?:\/\/a0\.muscache\.com\/im\/pictures\/(?:miso\/Hosting-\d+|hosting|lombard|prohost-api\/Hosting-\d+)\/[^"'\s)<>\\]+?\.(?:jpe?g|png|webp)(?:\?[^"'\s)<>\\]*)?/gi;
+
+const JSONLD_BLOCK_RE =
+  /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
 
 function decodeEntities(s: string): string {
   return s
@@ -51,128 +52,136 @@ function decodeEntities(s: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&#x2F;/g, "/")
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)));
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) =>
+      String.fromCharCode(parseInt(n, 16)),
+    );
 }
 
-function resolveUrl(raw: string, base: URL): string | null {
-  try {
-    const u = new URL(decodeEntities(raw.trim()), base);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-    return u.toString();
-  } catch {
-    return null;
+// Pull every `"<key>":"https://...jpg"` pair under image-shaped keys
+// out of an arbitrary JSON blob. We don't fully parse the deferred
+// state — Airbnb's Apollo cache changes shape between releases — but
+// the key names are stable enough.
+function extractUrlsFromJsonBlob(blob: string): string[] {
+  const out: string[] = [];
+  // baseUrl / pictureUrl / largeUrl / xLargeUrl / url all show up in
+  // the listing photos arrays.
+  const keyRe =
+    /"(?:baseUrl|pictureUrl|largeUrl|xLargeUrl|xxLargeUrl|originalPicture|url)"\s*:\s*"((?:https?:)?\/\/a0\.muscache\.com\/im\/pictures\/[^"]+)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = keyRe.exec(blob))) {
+    const raw = m[1];
+    const abs = raw.startsWith("//") ? `https:${raw}` : raw;
+    out.push(decodeEntities(abs));
   }
+  return out;
 }
 
-// Skip the things that obviously aren't real photos: icons, sprites,
-// pixel trackers, base64 SVGs, GIFs. Listing photos on every site
-// we care about are jpg/jpeg/webp/png at meaningful sizes.
-function isLikelyPhotoUrl(url: string): boolean {
-  if (url.startsWith("data:")) return false;
-  const lower = url.toLowerCase();
-  if (lower.endsWith(".svg") || lower.endsWith(".gif")) return false;
-  if (lower.endsWith(".ico")) return false;
-  if (/\/(?:icons?|sprites?|favicons?|logos?|avatars?|trackers?)\//.test(lower)) {
-    return false;
-  }
-  if (/[?&](?:w|width|size)=(\d+)/.test(lower)) {
-    const m = /[?&](?:w|width|size)=(\d+)/.exec(lower);
-    if (m && Number(m[1]) < 320) return false;
-  }
-  return /\.(?:jpe?g|png|webp)(?:\?|$|#)/i.test(lower);
-}
-
-function pickLargestFromSrcset(srcset: string): string | null {
-  // srcset = "url1 320w, url2 640w, url3 1200w" — return the widest.
-  const parts = srcset
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  let best: { url: string; w: number } | null = null;
-  for (const p of parts) {
-    const m = /^(\S+)\s+(\d+)w$/.exec(p);
-    if (m) {
-      const w = Number(m[2]);
-      if (!best || w > best.w) best = { url: m[1], w };
-    } else {
-      const url = p.split(/\s+/)[0];
-      if (url && !best) best = { url, w: 0 };
+function extractFromJsonLd(html: string): string[] {
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = JSONLD_BLOCK_RE.exec(html))) {
+    const inner = m[1].trim();
+    try {
+      const parsed = JSON.parse(inner) as unknown;
+      collectJsonLdImages(parsed, out);
+    } catch {
+      // Some pages cram multiple JSON objects in one block separated by
+      // commas. Skip — the HOSTING_PHOTO_RE pass below will still catch
+      // anything inlined.
     }
   }
-  return best ? best.url : null;
+  JSONLD_BLOCK_RE.lastIndex = 0;
+  return out;
 }
 
-function extractAirbnbUrls(html: string): string[] {
-  const hits = html.match(AIRBNB_CDN_RE) ?? [];
-  // Airbnb returns 720x and 1200x variants of the same picture id.
-  // Group by the picture path (everything up to "/policy:"), keep the
-  // largest variant we saw, drop duplicates.
+function collectJsonLdImages(node: unknown, out: string[]): void {
+  if (!node) return;
+  if (Array.isArray(node)) {
+    for (const child of node) collectJsonLdImages(child, out);
+    return;
+  }
+  if (typeof node !== "object") return;
+  const obj = node as Record<string, unknown>;
+  const img = obj.image;
+  if (typeof img === "string") {
+    out.push(img);
+  } else if (Array.isArray(img)) {
+    for (const i of img) {
+      if (typeof i === "string") out.push(i);
+      else if (i && typeof i === "object") {
+        const inner = (i as Record<string, unknown>).url;
+        if (typeof inner === "string") out.push(inner);
+      }
+    }
+  } else if (img && typeof img === "object") {
+    const url = (img as Record<string, unknown>).url;
+    if (typeof url === "string") out.push(url);
+  }
+  for (const v of Object.values(obj)) collectJsonLdImages(v, out);
+}
+
+// Group by the listing-photo id and keep the largest variant we saw.
+// Airbnb returns 720w / 1200w / original variants of the same picture
+// — only one should reach the user.
+function dedupeAndPickLargest(urls: string[]): string[] {
   const byId = new Map<string, string>();
-  for (const raw of hits) {
+  for (const raw of urls) {
     const u = decodeEntities(raw);
-    // The CDN path looks like /im/pictures/<id>/<policy>.jpg — group
-    // on the id segment (5th path part) when we can.
-    const m = /\/im\/pictures\/([^/]+)/.exec(u);
-    const key = m ? m[1] : u;
-    const existing = byId.get(key);
+    if (!isHostingPhoto(u)) continue;
+    const id = pictureId(u) ?? u;
+    const existing = byId.get(id);
     if (!existing) {
-      byId.set(key, u);
+      byId.set(id, u);
       continue;
     }
-    // Prefer the URL that looks bigger (longer query / "1200" hint).
-    const score = (s: string) =>
-      (/1200|1920|original/.test(s) ? 2 : 0) + (s.length > existing.length ? 1 : 0);
-    if (score(u) > score(existing)) byId.set(key, u);
+    if (variantScore(u) > variantScore(existing)) byId.set(id, u);
   }
   return Array.from(byId.values());
 }
 
-function extractGenericUrls(html: string, base: URL): string[] {
-  const found = new Set<string>();
-  const push = (raw: string | null | undefined) => {
-    if (!raw) return;
-    const abs = resolveUrl(raw, base);
-    if (abs && isLikelyPhotoUrl(abs)) found.add(abs);
-  };
-
-  // og:image / twitter:image / link rel=image_src — usually the hero.
-  let m: RegExpExecArray | null;
-  while ((m = META_IMAGE_RE.exec(html))) push(m[1]);
-  META_IMAGE_RE.lastIndex = 0;
-  while ((m = META_IMAGE_REV_RE.exec(html))) push(m[1]);
-  META_IMAGE_REV_RE.lastIndex = 0;
-  while ((m = LINK_IMAGE_RE.exec(html))) push(m[1]);
-  LINK_IMAGE_RE.lastIndex = 0;
-
-  // JSON-LD "image" fields (Schema.org Product / LodgingBusiness / etc.)
-  while ((m = JSONLD_IMAGE_RE.exec(html))) {
-    const raw = m[1];
-    if (raw.startsWith('"')) {
-      push(raw.slice(1, -1));
-    } else {
-      // Array of strings or {url:...} objects.
-      const matches = raw.match(/"https?:\/\/[^"]+"/g) ?? [];
-      for (const u of matches) push(u.slice(1, -1));
-    }
+function isHostingPhoto(url: string): boolean {
+  if (!/^https?:\/\/a0\.muscache\.com\//.test(url)) return false;
+  if (!/\.(?:jpe?g|png|webp)(?:\?|$)/i.test(url)) return false;
+  // Block the known non-listing paths.
+  if (/\/(?:user|users|aircover|safety|guidebook|launch|icons?|badges?|superhost|airbnb-platform-assets|categories|explore|wishlists|reviews|trips)\//i.test(url)) {
+    return false;
   }
-  JSONLD_IMAGE_RE.lastIndex = 0;
+  // Whitelist the listing-photo paths.
+  return /\/im\/pictures\/(?:miso\/Hosting-\d+|hosting\/|lombard\/|prohost-api\/Hosting-\d+)\//i.test(url);
+}
 
-  // Every <img> tag — prefer largest from srcset, fall back to src.
-  for (const tag of html.match(IMG_TAG_RE) ?? []) {
-    const srcset = SRCSET_ATTR_RE.exec(tag)?.[1];
-    if (srcset) {
-      push(pickLargestFromSrcset(srcset));
-      continue;
-    }
-    push(SRC_ATTR_RE.exec(tag)?.[1]);
-  }
-  // <picture><source srcset=...> the lazy-loaded variants.
-  for (const tag of html.match(SOURCE_TAG_RE) ?? []) {
-    const srcset = SRCSET_ATTR_RE.exec(tag)?.[1];
-    if (srcset) push(pickLargestFromSrcset(srcset));
-  }
+function pictureId(url: string): string | null {
+  const m = /\/im\/pictures\/[^/]+\/([^/]+)/.exec(url);
+  return m ? m[1] : null;
+}
 
-  return Array.from(found);
+function variantScore(u: string): number {
+  let s = u.length;
+  if (/original/.test(u)) s += 100;
+  if (/1200|1920|2048/.test(u)) s += 50;
+  if (/im_w=(\d+)/.exec(u)) {
+    const w = Number(/im_w=(\d+)/.exec(u)?.[1] ?? 0);
+    s += w / 20;
+  }
+  return s;
+}
+
+function classifyAirbnbUrl(parsed: URL): { ok: true; id: string } | { ok: false; reason: string } {
+  if (!AIRBNB_HOST_RE.test(parsed.hostname)) {
+    return {
+      ok: false,
+      reason: "Only Airbnb listings are supported — paste a URL from airbnb.com.",
+    };
+  }
+  const m = AIRBNB_LISTING_PATH_RE.exec(parsed.pathname);
+  if (!m) {
+    return {
+      ok: false,
+      reason:
+        "That looks like Airbnb, but not a listing page. Open the listing (URL contains /rooms/<id>) and copy that URL.",
+    };
+  }
+  return { ok: true, id: m[1] };
 }
 
 export async function POST(req: Request) {
@@ -208,6 +217,14 @@ export async function POST(req: Request) {
     );
   }
 
+  const classified = classifyAirbnbUrl(parsed);
+  if (!classified.ok) {
+    return NextResponse.json(
+      { ok: false, code: "NOT_AIRBNB_LISTING", message: classified.reason },
+      { status: 400 },
+    );
+  }
+
   let html: string;
   try {
     const resp = await fetch(parsed.toString(), {
@@ -225,7 +242,7 @@ export async function POST(req: Request) {
         {
           ok: false,
           code: "UPSTREAM",
-          message: `The page returned ${resp.status}. It may be private or require login.`,
+          message: `Airbnb returned ${resp.status}. The listing may be private or unavailable in your region.`,
         },
         { status: 502 },
       );
@@ -236,39 +253,34 @@ export async function POST(req: Request) {
       {
         ok: false,
         code: "FETCH_FAILED",
-        message: err instanceof Error ? err.message : "Couldn't fetch the page.",
+        message: err instanceof Error ? err.message : "Couldn't fetch the listing.",
       },
       { status: 502 },
     );
   }
 
-  const host = parsed.hostname.toLowerCase();
-  const isAirbnb = AIRBNB_HOST_RE.test(host);
+  // Pull candidates from BOTH sources, then merge.
+  //   - JSON-LD: Schema.org image array, ~5 hero shots, exact match to
+  //     what the listing's "Show all photos" hero section shows first.
+  //   - Apollo deferred-state JSON: full gallery embedded in
+  //     <script id="data-deferred-state-0"> (or similar). We don't
+  //     parse the whole tree — we grep for image-keyed URLs under the
+  //     listing-photo path whitelist.
+  //   - Raw HTML scan: catches anything the first two passes missed,
+  //     filtered by the same hosting-photo whitelist.
+  const jsonLdHits = extractFromJsonLd(html);
+  const blobHits = extractUrlsFromJsonBlob(html);
+  const rawHits = html.match(HOSTING_PHOTO_RE) ?? [];
 
-  let urls: string[];
-  let source: FetchResult["source"];
-  if (isAirbnb) {
-    urls = extractAirbnbUrls(html);
-    source = "airbnb";
-    // Airbnb sometimes returns the SPA shell with no inlined CDN URLs
-    // (geo / login walls). Fall back to generic extraction so the
-    // user at least gets the hero shot.
-    if (urls.length === 0) {
-      urls = extractGenericUrls(html, parsed);
-      source = "generic";
-    }
-  } else {
-    urls = extractGenericUrls(html, parsed);
-    source = "generic";
-  }
+  const combined = dedupeAndPickLargest([...jsonLdHits, ...blobHits, ...rawHits]);
 
-  if (urls.length === 0) {
+  if (combined.length === 0) {
     return NextResponse.json(
       {
         ok: false,
         code: "NO_PHOTOS",
         message:
-          "Couldn't find photos on that page. The site may load images via JavaScript only — drag screenshots in instead.",
+          "Couldn't find listing photos in that page. Airbnb sometimes serves a stripped shell — try again, or take screenshots from 'Show all photos' instead.",
       },
       { status: 422 },
     );
@@ -276,6 +288,11 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    result: { source, host, urls } satisfies FetchResult,
+    result: {
+      source: "airbnb",
+      host: parsed.hostname,
+      listingId: classified.id,
+      urls: combined,
+    } satisfies FetchResult,
   });
 }
