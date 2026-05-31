@@ -822,6 +822,13 @@ function PostListView({
   onAddSlides,
   onRemix,
 }: PostListViewProps) {
+  // Show only the first N rows by default to keep the section
+  // scannable when the user has dozens of logged posts. "Show all"
+  // expands. Resets implicitly when filter changes (different bucket
+  // → different visible array → comparison naturally re-clamps).
+  const COLLAPSED_COUNT = 3;
+  const [showAll, setShowAll] = useState(false);
+
   // Partition into the four filter buckets in one pass so the chip
   // counts and the visible list both read from the same partition.
   const buckets = useMemo(() => {
@@ -945,23 +952,36 @@ function PostListView({
           right now. Switch to another filter to see your other posts.
         </div>
       ) : (
-        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
-          {visible.map((p) => (
-            <PostRow
-              key={p.id}
-              post={p}
-              detectionOn={detectionOn}
-              averages={averages}
-              onMarkWinner={() => onMarkWinner(p.id)}
-              onDelete={() => onDelete(p.id)}
-              onArchiveToggle={() => onArchiveToggle(p.id)}
-              onLogUpdate={() => onLogUpdate(p)}
-              onEdit={() => onEdit(p)}
-              onAddSlides={() => onAddSlides(p.id)}
-              onRemix={() => onRemix(p.id)}
-            />
-          ))}
-        </ul>
+        <>
+          <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+            {(showAll ? visible : visible.slice(0, COLLAPSED_COUNT)).map((p) => (
+              <PostRow
+                key={p.id}
+                post={p}
+                detectionOn={detectionOn}
+                averages={averages}
+                onMarkWinner={() => onMarkWinner(p.id)}
+                onDelete={() => onDelete(p.id)}
+                onArchiveToggle={() => onArchiveToggle(p.id)}
+                onLogUpdate={() => onLogUpdate(p)}
+                onEdit={() => onEdit(p)}
+                onAddSlides={() => onAddSlides(p.id)}
+                onRemix={() => onRemix(p.id)}
+              />
+            ))}
+          </ul>
+          {visible.length > COLLAPSED_COUNT && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className="mt-2 w-full rounded border border-dashed border-gray-300 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+            >
+              {showAll
+                ? `Hide ${visible.length - COLLAPSED_COUNT} older post${visible.length - COLLAPSED_COUNT === 1 ? "" : "s"} ▴`
+                : `Show ${visible.length - COLLAPSED_COUNT} more post${visible.length - COLLAPSED_COUNT === 1 ? "" : "s"} ▾`}
+            </button>
+          )}
+        </>
       )}
 
       {posts.length > 0 && !detectionOn && (

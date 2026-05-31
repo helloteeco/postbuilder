@@ -48,6 +48,10 @@ export default function StoryBank({ onChange }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
+  // Show only the first N stories by default to keep the section
+  // compact when the user has dozens banked. "Show all" expands.
+  const [showAllStories, setShowAllStories] = useState(false);
+  const STORY_COLLAPSED_COUNT = 3;
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -270,7 +274,10 @@ export default function StoryBank({ onChange }: Props) {
             from Claude.ai.
           </li>
         )}
-        {stories.map((s) => (
+        {(showAllStories
+          ? stories
+          : stories.slice(0, STORY_COLLAPSED_COUNT)
+        ).map((s) => (
           <StoryRow
             key={s.id}
             story={s}
@@ -284,6 +291,18 @@ export default function StoryBank({ onChange }: Props) {
           />
         ))}
       </ul>
+
+      {stories.length > STORY_COLLAPSED_COUNT && (
+        <button
+          type="button"
+          onClick={() => setShowAllStories((v) => !v)}
+          className="mt-2 w-full rounded border border-dashed border-gray-300 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+        >
+          {showAllStories
+            ? `Hide ${stories.length - STORY_COLLAPSED_COUNT} older stor${stories.length - STORY_COLLAPSED_COUNT === 1 ? "y" : "ies"} ▴`
+            : `Show ${stories.length - STORY_COLLAPSED_COUNT} more stor${stories.length - STORY_COLLAPSED_COUNT === 1 ? "y" : "ies"} ▾`}
+        </button>
+      )}
     </section>
   );
 }
