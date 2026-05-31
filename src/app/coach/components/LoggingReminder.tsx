@@ -90,6 +90,10 @@ export default function LoggingReminder({
   // Collapsed by default when there's a wall of them; expanded
   // automatically when there are only 1-2 (no overwhelm to hide).
   const [expanded, setExpanded] = useState(reminders.length <= 2);
+  // Pro-tip is collapsed by default — it's reference material the
+  // user only needs to consult occasionally, not every time the
+  // reminder panel opens.
+  const [tipOpen, setTipOpen] = useState(false);
 
   if (reminders.length === 0) return null;
 
@@ -127,35 +131,59 @@ export default function LoggingReminder({
 
       {expanded && (
         <>
-          {/* Pro-tip: how to log faster with Claude's screen-reading */}
-          <div className="border-t border-amber-200 bg-amber-100/40 px-3 py-2.5 text-[11px] leading-relaxed text-amber-900">
-            <div className="font-semibold">
-              💡 Faster way — let Claude read the numbers off Instagram for you
-            </div>
-            <ol className="mt-1 list-decimal space-y-0.5 pl-5">
-              <li>
-                Open the post on Instagram in your phone or browser → tap{" "}
-                <strong>View insights</strong> so reach, saves, shares, likes,
-                etc. are on screen.
-              </li>
-              <li>
-                Open <strong>Claude desktop app</strong> (or the Chrome
-                extension) and type:{" "}
-                <em>
-                  &ldquo;Read the Instagram insights numbers visible on my
-                  screen and list reach, saves, shares, likes, comments,
-                  profile visits, follows.&rdquo;
-                </em>
-              </li>
-              <li>
-                Claude reads the screen and returns the numbers in seconds.
-                Click <strong>Update</strong> below, paste them in, save.
-              </li>
-            </ol>
-            <div className="mt-1 text-amber-800/80">
-              Skips the manual lookup + transcription. Same shortcut works for
-              7-day updates too.
-            </div>
+          {/* Pro-tip: how to log faster with Claude's screen-reading.
+              Collapsed by default — it's reference material, not a
+              header banner the user wants in their face every time. */}
+          <div className="border-t border-amber-200 bg-amber-100/40 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+            <button
+              type="button"
+              onClick={() => setTipOpen((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 text-left font-semibold"
+            >
+              <span>
+                💡 Faster way — let Claude read the numbers off Instagram for
+                you
+              </span>
+              <span className="text-amber-800">{tipOpen ? "Hide ▴" : "Show ▾"}</span>
+            </button>
+            {tipOpen && (
+              <>
+                <ol className="mt-2 list-decimal space-y-0.5 pl-5">
+                  <li>
+                    Open the post on Instagram → tap{" "}
+                    <strong>View insights</strong>. Don&apos;t worry about
+                    finding everything on one screen — IG splits them across
+                    sections.
+                  </li>
+                  <li>
+                    Open <strong>Claude desktop app</strong> (or the Chrome
+                    extension) and paste:{" "}
+                    <em>
+                      &ldquo;I&apos;m going to scroll through ALL the
+                      Instagram insights screens for one of my posts. As I
+                      scroll, watch the screen and track these numbers as you
+                      see them: reach, saves, shares, likes, comments, profile
+                      visits, follows. Tell me which ones you&apos;ve captured
+                      after each screen so I know when to stop scrolling.
+                      Then give me the final list.&rdquo;
+                    </em>
+                  </li>
+                  <li>
+                    Scroll / swipe through every IG insights section (overview
+                    → engagement → profile activity → audience). Claude
+                    accumulates the numbers across screens.
+                  </li>
+                  <li>
+                    When Claude confirms it has everything, click{" "}
+                    <strong>Update</strong> below, paste the numbers, save.
+                  </li>
+                </ol>
+                <div className="mt-1 text-amber-800/80">
+                  Skips manual lookup + transcription. Same shortcut works for
+                  7-day updates and works on web IG or mirrored phone screens.
+                </div>
+              </>
+            )}
           </div>
 
           {/* Compact reminder rows */}
