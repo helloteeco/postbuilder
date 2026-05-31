@@ -1,16 +1,30 @@
-// Reminder card surfaced at the top of the Performance Tracker section
-// when one or more logged posts need an updated snapshot.
+// Compact reminder card at the top of the Performance Tracker section.
 //
-// Two trigger windows mirror the shape of Instagram's metric curve:
-//   - 48h reminder  → most reliable read; shares are ~done, reach has
-//                     mostly settled.
-//   - 7-day reminder → archival accuracy on saves + late reach.
+// The previous design rendered one tall amber card per pending update.
+// At 5-6 pending reminders that consumed half the page and pushed the
+// "Log a new post" button + the post list far down the screen — the
+// user reported this felt overwhelming.
 //
-// Reminders the user explicitly skips are stored in localStorage so the
-// card never re-appears for that (post, kind) pair.
+// New shape: a single condensed card. Collapsed by default (when ≥ 3
+// reminders are pending), shows just the count + a 48h/7d breakdown.
+// Expanded shows each pending reminder as a compact one-line row with
+// the post title, last-logged timestamp, Update + Skip buttons. When
+// only 1-2 reminders are pending, it stays expanded (no point hiding
+// nearly-nothing behind a click).
+//
+// Above the reminder rows when expanded: a small "Faster way" tip
+// that explains how to use Claude desktop / browser extension to
+// auto-read IG insights numbers off the screen, which skips the
+// manual transcription step entirely. The user reported using this
+// workflow last time and finding it dramatically faster — surface it
+// so they (and any friend using the app) remember the option.
+//
+// Reminders the user skips are stored in localStorage so the card
+// never re-appears for that (post, kind) pair.
 
 "use client";
 
+import { useState } from "react";
 import {
   dismissReminder,
   type LoggedPost,
@@ -23,13 +37,15 @@ interface PendingReminder {
   reason: string;
   kind: ReminderKind;
   targetHours: number;
+  // ISO of the most recent snapshot the user has on this post, or
+  // null when they used the "remind me at 48h" path and haven't
+  // logged anything yet.
+  lastLoggedAt: string | null;
 }
 
 interface Props {
   posts: LoggedPost[];
-  // Open the logging form pre-filled for an update on the given post.
   onLogUpdate: (post: LoggedPost) => void;
-  // Bumps the parent's revision so dismissals re-render the list.
   onChanged: () => void;
 }
 
@@ -38,73 +54,157 @@ export function pendingReminders(posts: LoggedPost[]): PendingReminder[] {
   for (const p of posts) {
     const rec = getRecommendedNextSnapshot(p);
     if (rec && rec.shouldLog) {
+      const lastSnap = p.snapshots[p.snapshots.length - 1];
       out.push({
         post: p,
         reason: rec.reason,
         kind: rec.kind,
         targetHours: rec.targetHours,
+        lastLoggedAt: lastSnap?.loggedAt ?? null,
       });
     }
   }
   return out;
 }
 
-function reminderTitle(kind: ReminderKind, targetHours: number): string {
-  if (kind === "h48" || targetHours === 48) return "Time for the 48-hour update";
-  return "One last update at 7 days";
+// "Last logged 2d ago" / "Last logged 6h ago" / "Never logged".
+// Short, dense — fits as a sub-line under the post title.
+function relativeShort(iso: string | null): string {
+  if (!iso) return "Never logged";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60 * 1000) return "Just now";
+  const min = Math.floor(ms / (60 * 1000));
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(ms / (60 * 60 * 1000));
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.floor(ms / (24 * 60 * 60 * 1000));
+  return `${d}d ago`;
 }
 
-function reminderCopy(reminder: PendingReminder): string {
-  if (reminder.kind === "h48") {
-    return `Time to update "${reminder.post.title}". ${reminder.reason}.`;
-  }
-  return `One last update on "${reminder.post.title}". ${reminder.reason}.`;
-}
-
-export default function LoggingReminder({ posts, onLogUpdate, onChanged }: Props) {
+export default function LoggingReminder({
+  posts,
+  onLogUpdate,
+  onChanged,
+}: Props) {
   const reminders = pendingReminders(posts);
+  // Collapsed by default when there's a wall of them; expanded
+  // automatically when there are only 1-2 (no overwhelm to hide).
+  const [expanded, setExpanded] = useState(reminders.length <= 2);
+
   if (reminders.length === 0) return null;
+
+  const count48 = reminders.filter((r) => r.kind === "h48").length;
+  const count7d = reminders.filter((r) => r.kind === "d7").length;
 
   function handleSkip(r: PendingReminder) {
     dismissReminder(r.post.id, r.kind);
     onChanged();
   }
 
-  function handleUpdate(r: PendingReminder) {
-    onLogUpdate(r.post);
-  }
-
   return (
-    <div className="mb-4 space-y-2">
-      {reminders.map((r) => (
-        <div
-          key={`${r.post.id}-${r.kind}`}
-          className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-semibold uppercase tracking-wider text-amber-800">
-              {reminderTitle(r.kind, r.targetHours)}
-            </div>
-            <div className="mt-0.5">{reminderCopy(r)}</div>
-          </div>
-          <div className="flex flex-shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleUpdate(r)}
-              className="rounded bg-amber-700 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-800"
-            >
-              Update now
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSkip(r)}
-              className="rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 hover:bg-amber-100"
-            >
-              Skip this one
-            </button>
-          </div>
+    <div className="mb-4 overflow-hidden rounded-lg border border-amber-200 bg-amber-50">
+      {/* Compact header — clickable to toggle expand */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-amber-100/50"
+      >
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-sm font-semibold text-amber-900">
+            🟡 {reminders.length} post{reminders.length === 1 ? "" : "s"} need
+            updating
+          </span>
+          <span className="text-xs text-amber-800/80">
+            {count48 > 0 && `${count48} at 48h`}
+            {count48 > 0 && count7d > 0 && " · "}
+            {count7d > 0 && `${count7d} at 7d`}
+          </span>
         </div>
-      ))}
+        <span className="text-xs font-medium text-amber-800">
+          {expanded ? "Hide ▴" : "Show ▾"}
+        </span>
+      </button>
+
+      {expanded && (
+        <>
+          {/* Pro-tip: how to log faster with Claude's screen-reading */}
+          <div className="border-t border-amber-200 bg-amber-100/40 px-3 py-2.5 text-[11px] leading-relaxed text-amber-900">
+            <div className="font-semibold">
+              💡 Faster way — let Claude read the numbers off Instagram for you
+            </div>
+            <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+              <li>
+                Open the post on Instagram in your phone or browser → tap{" "}
+                <strong>View insights</strong> so reach, saves, shares, likes,
+                etc. are on screen.
+              </li>
+              <li>
+                Open <strong>Claude desktop app</strong> (or the Chrome
+                extension) and type:{" "}
+                <em>
+                  &ldquo;Read the Instagram insights numbers visible on my
+                  screen and list reach, saves, shares, likes, comments,
+                  profile visits, follows.&rdquo;
+                </em>
+              </li>
+              <li>
+                Claude reads the screen and returns the numbers in seconds.
+                Click <strong>Update</strong> below, paste them in, save.
+              </li>
+            </ol>
+            <div className="mt-1 text-amber-800/80">
+              Skips the manual lookup + transcription. Same shortcut works for
+              7-day updates too.
+            </div>
+          </div>
+
+          {/* Compact reminder rows */}
+          <ul className="divide-y divide-amber-200 border-t border-amber-200">
+            {reminders.map((r) => (
+              <li
+                key={`${r.post.id}-${r.kind}`}
+                className="flex flex-wrap items-center gap-2 px-3 py-2"
+              >
+                <span
+                  className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-900"
+                  title={
+                    r.kind === "h48"
+                      ? "48-hour reading window — most reliable for save / share rate"
+                      : "7-day reading window — final reach + saves"
+                  }
+                >
+                  {r.kind === "h48" ? "48h" : "7d"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm text-amber-900">
+                    {r.post.title}
+                  </div>
+                  <div className="text-[11px] text-amber-800/70">
+                    Last logged: {relativeShort(r.lastLoggedAt)}
+                  </div>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onLogUpdate(r.post)}
+                    className="rounded bg-amber-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-800"
+                  >
+                    Update
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSkip(r)}
+                    className="rounded border border-amber-300 bg-white px-2 py-1 text-xs text-amber-900 hover:bg-amber-100"
+                    title="Hide this reminder permanently"
+                  >
+                    Skip
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
