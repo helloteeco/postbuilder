@@ -652,6 +652,7 @@ export default function PostBuilder() {
             params={params}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            onDelete={deleteSlide}
           />
 
           {selected && (

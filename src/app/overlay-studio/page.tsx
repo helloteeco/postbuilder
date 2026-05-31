@@ -29,6 +29,7 @@ import {
 } from "@/app/overlay-studio/lib/overlayTypes";
 import OverlaySetupPanel from "./components/OverlaySetupPanel";
 import OverlayUpload from "./components/OverlayUpload";
+import OverlayUrlImport from "./components/OverlayUrlImport";
 import OverlayPromptPanel from "./components/OverlayPromptPanel";
 import OverlayMediaCard from "./components/OverlayMediaCard";
 import OverlaySlideRender from "./components/OverlaySlideRender";
@@ -131,6 +132,11 @@ export default function OverlayStudioPage() {
           <ProfileEditor profile={profile} onChange={setProfile} />
           <OverlaySetupPanel settings={settings} onChange={setSettings} />
           <OverlayUpload media={media} onSet={setMedia} />
+          <OverlayUrlImport
+            media={media}
+            format={settings.outputFormat}
+            onSet={setMedia}
+          />
           <OverlayPromptPanel
             settings={settings}
             media={media}

@@ -9,6 +9,7 @@ interface Props {
   params: PostBuilderParams;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
 const THUMB_WIDTH = 240;
@@ -20,6 +21,7 @@ export default function SlidePreviewGrid({
   params,
   selectedId,
   onSelect,
+  onDelete,
 }: Props) {
   if (slides.length === 0) {
     return (
@@ -38,10 +40,8 @@ export default function SlidePreviewGrid({
         const overflow = slideCharCount(slide) > params.maxCharsBody * 2.2;
         const selected = slide.id === selectedId;
         return (
-          <button
+          <div
             key={slide.id}
-            type="button"
-            onClick={() => onSelect(slide.id)}
             className={`group relative block overflow-hidden rounded-lg border-2 transition ${
               selected
                 ? "border-gray-900 ring-2 ring-gray-900/20"
@@ -49,28 +49,47 @@ export default function SlidePreviewGrid({
             }`}
             style={{ width: THUMB_WIDTH, height: THUMB_HEIGHT }}
           >
-            <div
-              style={{
-                width: SLIDE_WIDTH,
-                height: SLIDE_HEIGHT,
-                transform: `scale(${scale})`,
-                transformOrigin: "top left",
-              }}
+            <button
+              type="button"
+              onClick={() => onSelect(slide.id)}
+              className="block h-full w-full text-left"
+              aria-label={`Select slide ${i + 1}`}
             >
-              <CarouselSlide slide={slide} profile={profile} warnOverflow={overflow} />
-            </div>
-            <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+              <div
+                style={{
+                  width: SLIDE_WIDTH,
+                  height: SLIDE_HEIGHT,
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                }}
+              >
+                <CarouselSlide slide={slide} profile={profile} warnOverflow={overflow} />
+              </div>
+            </button>
+            <span className="pointer-events-none absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
               {i + 1}
             </span>
             {overflow && (
               <span
-                className="absolute right-1 top-1 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-medium text-white"
+                className="pointer-events-none absolute right-9 top-1 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-medium text-white"
                 title="Content may overflow"
               >
                 !
               </span>
             )}
-          </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(slide.id);
+              }}
+              title="Delete this slide"
+              aria-label={`Delete slide ${i + 1}`}
+              className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-xs font-bold text-white opacity-0 transition hover:bg-red-600 group-hover:opacity-100 focus:opacity-100"
+            >
+              ✕
+            </button>
+          </div>
         );
       })}
     </div>
