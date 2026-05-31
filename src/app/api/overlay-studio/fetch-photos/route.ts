@@ -60,18 +60,27 @@ function decodeEntities(s: string): string {
 // Pull every `"<key>":"https://...jpg"` pair under image-shaped keys
 // out of an arbitrary JSON blob. We don't fully parse the deferred
 // state — Airbnb's Apollo cache changes shape between releases — but
-// the key names are stable enough.
+// the key names are stable enough. Also handles JSON-escaped slashes
+// (`a0.muscache.com\/im\/pictures\/...`) which is how Airbnb encodes
+// URLs inside their inlined script blob.
 function extractUrlsFromJsonBlob(blob: string): string[] {
   const out: string[] = [];
-  // baseUrl / pictureUrl / largeUrl / xLargeUrl / url all show up in
-  // the listing photos arrays.
   const keyRe =
-    /"(?:baseUrl|pictureUrl|largeUrl|xLargeUrl|xxLargeUrl|originalPicture|url)"\s*:\s*"((?:https?:)?\/\/a0\.muscache\.com\/im\/pictures\/[^"]+)"/gi;
+    /"(?:baseUrl|pictureUrl|largeUrl|xLargeUrl|xxLargeUrl|originalPicture|picture|url|src|imageUrl|mediaUrl)"\s*:\s*"((?:https?:)?(?:\\?\/){2}a0\.muscache\.com(?:\\?\/)im(?:\\?\/)pictures[^"]+)"/gi;
   let m: RegExpExecArray | null;
   while ((m = keyRe.exec(blob))) {
-    const raw = m[1];
-    const abs = raw.startsWith("//") ? `https:${raw}` : raw;
-    out.push(decodeEntities(abs));
+    let raw = m[1].replace(/\\\//g, "/");
+    if (raw.startsWith("//")) raw = `https:${raw}`;
+    out.push(decodeEntities(raw));
+  }
+  // Also grab bare URL strings the keyed pass missed — many newer
+  // Airbnb payloads embed photos as plain strings inside arrays.
+  const bareRe =
+    /"((?:https?:)?(?:\\?\/){2}a0\.muscache\.com(?:\\?\/)im(?:\\?\/)pictures(?:\\?\/)(?:miso(?:\\?\/)Hosting-\d+|hosting|lombard|prohost-api(?:\\?\/)Hosting-\d+)[^"]+\.(?:jpe?g|png|webp))/gi;
+  while ((m = bareRe.exec(blob))) {
+    let raw = m[1].replace(/\\\//g, "/");
+    if (raw.startsWith("//")) raw = `https:${raw}`;
+    out.push(decodeEntities(raw));
   }
   return out;
 }
@@ -166,6 +175,25 @@ function variantScore(u: string): number {
   return s;
 }
 
+async function fetchAirbnbHtml(url: string): Promise<string | null> {
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  }
+}
+
 function classifyAirbnbUrl(parsed: URL): { ok: true; id: string } | { ok: false; reason: string } {
   if (!AIRBNB_HOST_RE.test(parsed.hostname)) {
     return {
@@ -225,52 +253,49 @@ export async function POST(req: Request) {
     );
   }
 
-  let html: string;
-  try {
-    const resp = await fetch(parsed.toString(), {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      redirect: "follow",
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!resp.ok) {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "UPSTREAM",
-          message: `Airbnb returned ${resp.status}. The listing may be private or unavailable in your region.`,
-        },
-        { status: 502 },
-      );
-    }
-    html = await resp.text();
-  } catch (err) {
+  // Strip the query + fragment entirely. Pasted URLs nearly always
+  // carry ?photo_id=… and ?source_impression_id=… — the first one
+  // tells Airbnb's SSR to render just that one photo's viewer state,
+  // which is exactly why we were getting back a single image. Keep
+  // the path the user pasted (handles /rooms/<id>, /h/<slug>, and
+  // /luxury/listing/<id> without reconstruction).
+  const cleanPath = parsed.pathname.replace(/\/+$/, "");
+  const cleanListing = `${parsed.origin}${cleanPath}`;
+  const photosUrl = `${cleanListing}/photos`;
+
+  // Race both URLs. The listing page gives us JSON-LD hero shots;
+  // /photos opens the dedicated gallery viewer which SSRs the full
+  // picture list. Merging both gives us coverage even if one of them
+  // serves a stripped shell.
+  const [roomsHtml, photosHtml] = await Promise.all([
+    fetchAirbnbHtml(cleanListing),
+    fetchAirbnbHtml(photosUrl),
+  ]);
+
+  if (!roomsHtml && !photosHtml) {
     return NextResponse.json(
       {
         ok: false,
         code: "FETCH_FAILED",
-        message: err instanceof Error ? err.message : "Couldn't fetch the listing.",
+        message:
+          "Couldn't reach Airbnb. The listing may be private, regionally blocked, or rate-limited.",
       },
       { status: 502 },
     );
   }
 
-  // Pull candidates from BOTH sources, then merge.
-  //   - JSON-LD: Schema.org image array, ~5 hero shots, exact match to
-  //     what the listing's "Show all photos" hero section shows first.
-  //   - Apollo deferred-state JSON: full gallery embedded in
-  //     <script id="data-deferred-state-0"> (or similar). We don't
-  //     parse the whole tree — we grep for image-keyed URLs under the
-  //     listing-photo path whitelist.
-  //   - Raw HTML scan: catches anything the first two passes missed,
-  //     filtered by the same hosting-photo whitelist.
-  const jsonLdHits = extractFromJsonLd(html);
-  const blobHits = extractUrlsFromJsonBlob(html);
-  const rawHits = html.match(HOSTING_PHOTO_RE) ?? [];
+  const jsonLdHits = [
+    ...extractFromJsonLd(roomsHtml ?? ""),
+    ...extractFromJsonLd(photosHtml ?? ""),
+  ];
+  const blobHits = [
+    ...extractUrlsFromJsonBlob(roomsHtml ?? ""),
+    ...extractUrlsFromJsonBlob(photosHtml ?? ""),
+  ];
+  const rawHits = [
+    ...((roomsHtml ?? "").match(HOSTING_PHOTO_RE) ?? []),
+    ...((photosHtml ?? "").match(HOSTING_PHOTO_RE) ?? []),
+  ];
 
   const combined = dedupeAndPickLargest([...jsonLdHits, ...blobHits, ...rawHits]);
 
