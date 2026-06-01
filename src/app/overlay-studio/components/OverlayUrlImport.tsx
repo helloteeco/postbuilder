@@ -49,7 +49,7 @@ interface FetchErr {
 type FetchResp = FetchOk | FetchErr;
 
 const SETUP_HINT =
-  "Tip: Airbnb hides the gallery behind JS — set SCRAPINGBEE_API_KEY in Vercel (free tier covers ~40 listings/mo) and you'll get all ~30 photos per listing instead of just the hero shot.";
+  "Tip: this listing's gallery came back thin. If it happens often, set SCRAPINGBEE_API_KEY in Vercel (free tier ~40 listings/mo) as a fallback for when Airbnb blocks our server.";
 
 export default function OverlayUrlImport({ media, format, onSet }: Props) {
   const [url, setUrl] = useState("");

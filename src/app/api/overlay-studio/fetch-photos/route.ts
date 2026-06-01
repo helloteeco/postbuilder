@@ -161,8 +161,17 @@ function isHostingPhoto(url: string): boolean {
 }
 
 function pictureId(url: string): string | null {
-  const m = /\/im\/pictures\/[^/]+\/([^/]+)/.exec(url);
-  return m ? m[1] : null;
+  // Use the final path segment (the photo's filename / UUID). Variants
+  // of the same photo share a filename but differ only in their
+  // policy/size segment (`/original/`, `/large/`, `/policy:.../`), so
+  // this dedupes variants while keeping distinct photos distinct.
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/").filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : null;
+  } catch {
+    return null;
+  }
 }
 
 function variantScore(u: string): number {
@@ -177,13 +186,95 @@ function variantScore(u: string): number {
 }
 
 // Airbnb actively serves a stripped React shell to plain server
-// fetches (their full photo gallery is hydrated client-side). To get
-// the rendered HTML we route through ScrapingBee, a managed headless-
-// Chrome proxy. If SCRAPINGBEE_API_KEY isn't set we fall back to a
-// direct fetch — it usually returns only 1 hero shot, and the route
-// will tell the UI to surface a setup hint.
+// fetches (their full photo gallery is hydrated client-side). Three
+// strategies are tried in order, free → fragile → paid:
+//
+//   1. Airbnb's v2 REST endpoint (pdp_listing_details) hit with the
+//      public web API key. Free, fast, returns the full photo array
+//      as structured JSON. This is what their own site / app use
+//      under the hood. Can break if Airbnb rotates the key or
+//      deprecates the endpoint, but it has been stable for years.
+//   2. ScrapingBee (managed headless Chrome) if SCRAPINGBEE_API_KEY
+//      is set. Most reliable but costs ~25 credits per listing
+//      (free tier covers ~40 listings/month).
+//   3. Direct HTML fetch as a last resort. Usually returns only the
+//      hero shot because the gallery is client-rendered.
+
+// Airbnb's public web API key, embedded in every page they serve.
+// Stable for years; rotates only when they do a major API revamp.
+const AIRBNB_PUBLIC_API_KEY = "d306zoyjsyarp7ifhu67rjxn52tv0t20";
+
 function hasScrapingBee(): boolean {
   return !!process.env.SCRAPINGBEE_API_KEY;
+}
+
+// Strategy 1 — Airbnb's own v2 REST endpoint, free.
+//
+// GET https://www.airbnb.com/api/v2/pdp_listing_details/<id>
+//      ?_format=for_rooms_show
+// Headers: X-Airbnb-API-Key, browser-like User-Agent.
+//
+// Response (abbrev): { pdp_listing_detail: { photos: [{ xx_large_url: ... }, ...] } }
+async function tryAirbnbApi(listingId: string): Promise<string[] | null> {
+  // The id must be the numeric listing id. Non-numeric (e.g. /h/<slug>)
+  // ids won't work here — we'll fall through to the HTML strategies.
+  if (!/^\d+$/.test(listingId)) return null;
+  const url = `https://www.airbnb.com/api/v2/pdp_listing_details/${listingId}?_format=for_rooms_show`;
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        "X-Airbnb-API-Key": AIRBNB_PUBLIC_API_KEY,
+        Accept: "application/json",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as unknown;
+    return extractPhotosFromV2Response(data);
+  } catch {
+    return null;
+  }
+}
+
+// Walk the v2 response and pull every photo URL we can find. The
+// response shape is stable but has nested wrappers and a few alias
+// fields per photo — we accept any of them and dedupe later.
+function extractPhotosFromV2Response(data: unknown): string[] {
+  const out: string[] = [];
+  const PHOTO_KEYS = new Set([
+    "xx_large_url",
+    "x_large_url",
+    "large_url",
+    "picture",
+    "url",
+    "scrim_color",
+    "thumbnail_url",
+  ]);
+
+  function walk(node: unknown): void {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const c of node) walk(c);
+      return;
+    }
+    const obj = node as Record<string, unknown>;
+    for (const [k, v] of Object.entries(obj)) {
+      if (
+        typeof v === "string" &&
+        PHOTO_KEYS.has(k) &&
+        v.includes("muscache.com/im/pictures/")
+      ) {
+        out.push(v);
+      } else if (v && typeof v === "object") {
+        walk(v);
+      }
+    }
+  }
+  walk(data);
+  return out;
 }
 
 async function fetchAirbnbHtml(url: string): Promise<string | null> {
@@ -294,16 +385,23 @@ export async function POST(req: Request) {
   const cleanListing = `${parsed.origin}${cleanPath}`;
   const photosUrl = `${cleanListing}/photos`;
 
-  // Race both URLs. The listing page gives us JSON-LD hero shots;
-  // /photos opens the dedicated gallery viewer which SSRs the full
-  // picture list. Merging both gives us coverage even if one of them
-  // serves a stripped shell.
-  const [roomsHtml, photosHtml] = await Promise.all([
-    fetchAirbnbHtml(cleanListing),
-    fetchAirbnbHtml(photosUrl),
-  ]);
+  // Strategy 1 — Airbnb's own JSON API. Free, fast, returns the full
+  // gallery directly when it works.
+  const apiHits = (await tryAirbnbApi(classified.id)) ?? [];
 
-  if (!roomsHtml && !photosHtml) {
+  // Strategy 2 + 3 — fetch the HTML pages and grep for photos. Only
+  // pay this cost if the API didn't already give us a complete result
+  // (it usually does on numeric listing ids, but slug-based URLs or
+  // newer listings sometimes fall through).
+  const needsHtml = apiHits.filter((u) => isHostingPhoto(u)).length < 10;
+  const [roomsHtml, photosHtml] = needsHtml
+    ? await Promise.all([
+        fetchAirbnbHtml(cleanListing),
+        fetchAirbnbHtml(photosUrl),
+      ])
+    : [null, null];
+
+  if (apiHits.length === 0 && !roomsHtml && !photosHtml) {
     return NextResponse.json(
       {
         ok: false,
@@ -328,7 +426,12 @@ export async function POST(req: Request) {
     ...((photosHtml ?? "").match(HOSTING_PHOTO_RE) ?? []),
   ];
 
-  const combined = dedupeAndPickLargest([...jsonLdHits, ...blobHits, ...rawHits]);
+  const combined = dedupeAndPickLargest([
+    ...apiHits,
+    ...jsonLdHits,
+    ...blobHits,
+    ...rawHits,
+  ]);
 
   const setupNeeded = !hasScrapingBee();
 
