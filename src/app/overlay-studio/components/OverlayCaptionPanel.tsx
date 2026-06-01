@@ -1,7 +1,9 @@
 "use client";
 
 // Compact caption panel. Auto-composed from each photo's body text +
-// the chosen CTA, OR replaced by Claude's response. Always editable.
+// the chosen CTA, OR (default) the structured "warm-design" template
+// with hook + 3 design tips + ROI math + DESIGN CTA + service offer
+// for SD local + remote setup. Always editable.
 
 import { useState } from "react";
 import {
@@ -9,6 +11,7 @@ import {
   type OverlaySettings,
 } from "@/app/overlay-studio/lib/overlayTypes";
 import type { OverlayMedia } from "@/app/overlay-studio/lib/overlayTypes";
+import { pickTips } from "@/app/overlay-studio/lib/designTips";
 
 interface Props {
   media: OverlayMedia[];
@@ -28,8 +31,10 @@ export default function OverlayCaptionPanel({
   const [copied, setCopied] = useState<"cap" | "fc" | null>(null);
 
   function compose() {
+    const captionFn =
+      settings.captionStyle === "warm-design" ? composeWarmDesignCaption : composeCaption;
     onChange({
-      caption: composeCaption(media, settings),
+      caption: captionFn(media, settings),
       firstComment: composeFirstComment(settings),
     });
   }
@@ -158,4 +163,58 @@ function composeCtaLine(s: OverlaySettings): string {
     return `${filled} ${s.bookingLink}`;
   }
   return filled;
+}
+
+// The "warm-design" template. Long, helpful, casual lowercase voice,
+// no em dashes anywhere. Structured as:
+//
+//   1. hook line (varies slightly by local vs remote audience)
+//   2. 3 rotating design tips at 3rd grade level
+//   3. ROI math: concrete numbers tied to nightly rate x bookings
+//   4. service offer: SD local install + remote setup + cohosting
+//   5. DESIGN keyword CTA
+//
+// The math defaults work for a typical mid-tier listing ($50 ADR
+// bump on a property that books ~250 nights). The user can edit any
+// of it in the textarea after auto-build.
+export function composeWarmDesignCaption(
+  media: OverlayMedia[],
+  s: OverlaySettings,
+): string {
+  const keyword = (s.dmKeyword || "DESIGN").toUpperCase();
+  const seed = media.length;
+  const tips = pickTips(3, seed);
+  const tipBlock = tips.map((t) => `→ ${t}`).join("\n");
+
+  const isLocal = s.audience === "local";
+  const hook = isLocal
+    ? "this is what good design does for a san diego rental."
+    : "this is what good design does, even from across the country.";
+
+  const nick = s.listingNickname.trim();
+  const subhead = nick
+    ? `${nick}. soft light. warm tones. one spot guests fight over. simple stuff. big results.`
+    : "soft light. warm tones. one spot guests fight over. simple stuff. big results.";
+
+  const tipsHeader = "3 design moves that print money:";
+
+  const roi = [
+    "why this matters:",
+    "better photos = top of search = more bookings.",
+    "$50 bump on nightly rate x 250 booked nights = $12,500 more a year.",
+    "one design refresh pays for itself in about 6 weeks. usually less.",
+  ].join("\n");
+
+  const service = [
+    "we run two playbooks:",
+    "🏡 san diego: full local install. we walk your property, source, stage, photograph. you sleep.",
+    "✈️ everywhere else: full remote setup. we design, ship, and coordinate with your handyman. you sleep.",
+    "🛎️ co-hosting available if you want us running the listing too.",
+  ].join("\n");
+
+  const cta = `comment ${keyword} and i will dm you the playbook + pricing 👇`;
+
+  return [hook, subhead, tipsHeader, tipBlock, roi, service, cta]
+    .filter(Boolean)
+    .join("\n\n");
 }

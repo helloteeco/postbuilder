@@ -82,6 +82,14 @@ export interface OverlayMedia {
 export interface OverlaySettings {
   outputFormat: OutputFormat;
   showProfile: boolean;
+  // Bake a soft warm preset into every imported photo. Default on so
+  // the carousel has a consistent editorial look without manual color
+  // grading. Apply happens once at import time, baked into the dataUrl.
+  enhancePhotos: boolean;
+  // Which caption template "Auto-build" uses. 'warm-design' is the
+  // long structured caption with design tips + ROI math + DESIGN CTA.
+  // 'plain' joins each photo's body field (the original behavior).
+  captionStyle: "warm-design" | "plain";
   audience: Audience;
   pillar: DesignPillar;
   ctaKind: CtaKind;
@@ -98,9 +106,11 @@ export interface OverlaySettings {
 export const DEFAULT_SETTINGS: OverlaySettings = {
   outputFormat: "post",
   showProfile: true,
+  enhancePhotos: true,
+  captionStyle: "warm-design",
   audience: "local",
   pillar: "design-roi",
-  ctaKind: "book-call",
+  ctaKind: "comment-keyword",
   bookingLink: "",
   dmKeyword: "DESIGN",
   listingNickname: "",

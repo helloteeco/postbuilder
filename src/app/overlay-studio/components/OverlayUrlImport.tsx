@@ -17,15 +17,19 @@ import {
   defaultPositionForBand,
 } from "@/app/overlay-studio/lib/overlayAnalysis";
 import { scorePhoto } from "@/app/overlay-studio/lib/photoScoring";
+import { enhancePhoto } from "@/app/overlay-studio/lib/photoEnhance";
+import { pickTip } from "@/app/overlay-studio/lib/designTips";
 import {
   OUTPUT_DIMENSIONS,
   type OutputFormat,
   type OverlayMedia,
+  type OverlaySettings,
 } from "@/app/overlay-studio/lib/overlayTypes";
 
 interface Props {
   media: OverlayMedia[];
   format: OutputFormat;
+  settings: OverlaySettings;
   onSet: (next: OverlayMedia[]) => void;
 }
 
@@ -51,7 +55,12 @@ type FetchResp = FetchOk | FetchErr;
 const SETUP_HINT =
   "Tip: this listing's gallery came back thin. If it happens often, set SCRAPINGBEE_API_KEY in Vercel (free tier ~40 listings/mo) as a fallback for when Airbnb blocks our server.";
 
-export default function OverlayUrlImport({ media, format, onSet }: Props) {
+export default function OverlayUrlImport({
+  media,
+  format,
+  settings,
+  onSet,
+}: Props) {
   const [url, setUrl] = useState("");
   const [pick, setPick] = useState<Pick>("top10");
   const [busy, setBusy] = useState(false);
@@ -125,22 +134,29 @@ export default function OverlayUrlImport({ media, format, onSet }: Props) {
         return;
       }
 
-      setStatus(`Analyzing ${keep.length} photos for text placement…`);
+      setStatus(
+        settings.enhancePhotos
+          ? `Enhancing + analyzing ${keep.length} photos…`
+          : `Analyzing ${keep.length} photos for text placement…`,
+      );
       const fresh: OverlayMedia[] = [];
       for (let i = 0; i < keep.length; i++) {
         const k = keep[i];
-        const auto = await analyzeImage(k.dataUrl);
+        const dataUrl = settings.enhancePhotos
+          ? await enhancePhoto(k.dataUrl)
+          : k.dataUrl;
+        const auto = await analyzeImage(dataUrl);
         const recipe = carouselRecipe(media.length + keep.length);
         const presetKey = recipe[media.length + i] ?? "editorial";
         const def = PRESETS[presetKey];
         fresh.push({
           id: `om_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}_${i}`,
-          dataUrl: k.dataUrl,
+          dataUrl,
           shotType: "living",
           role: def.role,
           preset: presetKey,
           headline: "",
-          body: "",
+          body: pickTip(media.length + i),
           textColor: auto.color,
           position: def.defaultPosition || defaultPositionForBand(auto.band),
           scrim: def.scrim !== "none",

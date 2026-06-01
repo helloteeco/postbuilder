@@ -42,7 +42,10 @@ import OverlayUrlImport from "./components/OverlayUrlImport";
 import OverlayPromptPanel from "./components/OverlayPromptPanel";
 import OverlayMediaCard from "./components/OverlayMediaCard";
 import OverlaySlideRender from "./components/OverlaySlideRender";
-import OverlayCaptionPanel from "./components/OverlayCaptionPanel";
+import OverlayCaptionPanel, {
+  composeFirstComment,
+  composeWarmDesignCaption,
+} from "./components/OverlayCaptionPanel";
 import OverlayExportBar from "./components/OverlayExportBar";
 import RecentOverlays from "./components/RecentOverlays";
 
@@ -161,6 +164,21 @@ export default function OverlayStudioPage() {
     }
   }, [media, selectedId]);
 
+  // Auto-fill the caption on the FIRST upload of a fresh batch.
+  // Skipped if the user has already typed something (we never
+  // overwrite their work).
+  useEffect(() => {
+    if (media.length === 0) return;
+    if (caption.trim() || firstComment.trim()) return;
+    if (settings.captionStyle === "warm-design") {
+      setCaption(composeWarmDesignCaption(media, settings));
+      setFirstComment(composeFirstComment(settings));
+    }
+    // The else branch (plain) waits for the user to click Auto-build
+    // since plain mode just joins photo bodies and they may want to
+    // edit those first.
+  }, [media, caption, firstComment, settings]);
+
   const dim = OUTPUT_DIMENSIONS[settings.outputFormat];
   const selected = media.find((m) => m.id === selectedId) ?? null;
   const selectedIdx = media.findIndex((m) => m.id === selectedId);
@@ -216,10 +234,15 @@ export default function OverlayStudioPage() {
         <aside className="space-y-4">
           <ProfileEditor profile={profile} onChange={setProfile} />
           <OverlaySetupPanel settings={settings} onChange={setSettings} />
-          <OverlayUpload media={media} onSet={setMedia} />
+          <OverlayUpload
+            media={media}
+            settings={settings}
+            onSet={setMedia}
+          />
           <OverlayUrlImport
             media={media}
             format={settings.outputFormat}
+            settings={settings}
             onSet={setMedia}
           />
           <OverlayPromptPanel

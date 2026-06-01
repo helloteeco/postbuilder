@@ -10,16 +10,22 @@ import {
   analyzeImage,
   defaultPositionForBand,
 } from "@/app/overlay-studio/lib/overlayAnalysis";
-import type { OverlayMedia } from "@/app/overlay-studio/lib/overlayTypes";
+import { enhancePhoto } from "@/app/overlay-studio/lib/photoEnhance";
+import { pickTip } from "@/app/overlay-studio/lib/designTips";
+import type {
+  OverlayMedia,
+  OverlaySettings,
+} from "@/app/overlay-studio/lib/overlayTypes";
 
 interface Props {
   media: OverlayMedia[];
+  settings: OverlaySettings;
   onSet: (next: OverlayMedia[]) => void;
 }
 
 const PHOTO_INPUT_ID = "overlay-photo-input";
 
-export default function OverlayUpload({ media, onSet }: Props) {
+export default function OverlayUpload({ media, settings, onSet }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -30,7 +36,8 @@ export default function OverlayUpload({ media, onSet }: Props) {
     const fresh: OverlayMedia[] = [];
     for (let i = 0; i < arr.length; i++) {
       const file = arr[i];
-      const dataUrl = await readAsDataUrl(file);
+      const raw = await readAsDataUrl(file);
+      const dataUrl = settings.enhancePhotos ? await enhancePhoto(raw) : raw;
       const auto = await analyzeImage(dataUrl);
       const recipe = carouselRecipe(startingCount + arr.length);
       const preset = recipe[startingCount + i] ?? "editorial";
@@ -42,7 +49,7 @@ export default function OverlayUpload({ media, onSet }: Props) {
         role: def.role,
         preset,
         headline: "",
-        body: "",
+        body: pickTip(startingCount + i),
         textColor: auto.color,
         position: def.defaultPosition || defaultPositionForBand(auto.band),
         scrim: def.scrim !== "none",

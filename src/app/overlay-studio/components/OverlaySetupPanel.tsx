@@ -67,6 +67,26 @@ export default function OverlaySetupPanel({ settings, onChange }: Props) {
           Show profile chip on each slide
         </label>
 
+        <label className="flex items-center gap-2 text-xs text-gray-700">
+          <input
+            type="checkbox"
+            checked={settings.enhancePhotos}
+            onChange={(e) => patch("enhancePhotos", e.target.checked)}
+          />
+          Enhance new photos (soft warm preset)
+        </label>
+
+        <label className="flex items-center gap-2 text-xs text-gray-700">
+          <input
+            type="checkbox"
+            checked={settings.captionStyle === "warm-design"}
+            onChange={(e) =>
+              patch("captionStyle", e.target.checked ? "warm-design" : "plain")
+            }
+          />
+          Auto-write the warm-design caption
+        </label>
+
         <label className="block text-xs text-gray-600">
           Audience
           <select
