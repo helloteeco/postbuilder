@@ -26,6 +26,7 @@ import { pickStoryCopy } from "@/app/overlay-studio/lib/storyScripts";
 import { readFileAsDataUrl } from "@/lib/shared-utils";
 import {
   buildBookmarkletUrl,
+  buildConsoleSnippet,
   readAirbnbPhotosFromHash,
 } from "@/app/overlay-studio/lib/bookmarklet";
 import {
@@ -101,14 +102,28 @@ export default function OverlayUrlImport({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [bookmarkletHref, setBookmarkletHref] = useState<string>("javascript:void(0)");
+  const [consoleSnippet, setConsoleSnippet] = useState<string>("");
+  const [snippetCopied, setSnippetCopied] = useState(false);
 
-  // Compute the bookmarklet URL once the window object is available.
-  // The bookmarklet bakes in window.location.origin so it opens THIS
-  // deployment when the user later clicks it from an Airbnb tab.
+  // Compute the bookmarklet URL + Console snippet once the window
+  // object is available. Both bake in window.location.origin so they
+  // open THIS deployment when the user runs them later.
   useEffect(() => {
     if (typeof window === "undefined") return;
     setBookmarkletHref(buildBookmarkletUrl(window.location.origin));
+    setConsoleSnippet(buildConsoleSnippet(window.location.origin));
   }, []);
+
+  async function copySnippet() {
+    try {
+      await navigator.clipboard.writeText(consoleSnippet);
+      setSnippetCopied(true);
+      setTimeout(() => setSnippetCopied(false), 2000);
+    } catch {
+      // Clipboard write failed — the textarea below is already
+      // selectable so the user can hand-copy.
+    }
+  }
 
   // Auto-import when the page is opened with #airbnbphotos=… in the
   // URL hash — that's how the bookmarklet hands off photos from an
@@ -279,7 +294,7 @@ export default function OverlayUrlImport({
       <div className="mb-3 grid grid-cols-3 gap-1.5">
         {(
           [
-            { key: "bookmarklet", label: "Bookmarklet ⚡" },
+            { key: "bookmarklet", label: "DevTools ✓" },
             { key: "url", label: "Paste URL" },
             { key: "paste", label: "Paste image URLs" },
           ] as { key: Mode; label: string }[]
@@ -301,52 +316,93 @@ export default function OverlayUrlImport({
       </div>
 
       {mode === "bookmarklet" && (
-        <div className="space-y-2">
-          <p className="rounded border border-amber-200 bg-amber-50 p-2 text-[11px] leading-relaxed text-amber-900">
-            <strong>If you already have an &ldquo;⚡ Send to Overlay
-            Studio&rdquo; bookmark from an earlier version, delete it
-            first.</strong> The bookmarklet code has changed; old
-            bookmarks point at outdated logic and won&apos;t work right.
+        <div className="space-y-3">
+          <p className="rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] leading-relaxed text-emerald-900">
+            <strong>This works every time.</strong> Airbnb blocks
+            bookmarklets via CSP, so we use DevTools Console instead.
+            Copy the snippet, paste it on the Airbnb tab&apos;s Console,
+            hit Enter — a new tab opens with photos already importing.
           </p>
-          <p className="text-[11px] leading-relaxed text-gray-600">
-            <strong>Drag the button below to your bookmarks bar:</strong>
-          </p>
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a
-            href={bookmarkletHref}
-            onClick={(e) => {
-              e.preventDefault();
-              alert(
-                "Drag this button to your bookmarks bar instead of clicking it. (Bookmarklets can only run on the page they're being clicked from.)",
-              );
-            }}
-            draggable
-            className="inline-flex items-center gap-1.5 rounded-md bg-amber-400 px-3 py-1.5 text-xs font-bold text-amber-950 shadow hover:bg-amber-300"
-            title="Drag me to the bookmarks bar"
-          >
-            ⚡ Send to Overlay Studio
-          </a>
-          <p className="text-[11px] leading-relaxed text-gray-600">
-            Then for any Airbnb listing — <strong>one click</strong>:
-          </p>
-          <ol className="list-decimal space-y-1 pl-5 text-[11px] text-gray-700">
-            <li>Open the listing in a tab.</li>
-            <li>
-              Click <em>Show all photos</em> so the full gallery loads in
-              the DOM.
-            </li>
-            <li>
-              Click the bookmark. A new tab opens to Overlay Studio with
-              the photos already importing. No pasting, no clipboard.
-            </li>
-          </ol>
-          <p className="rounded bg-gray-50 p-2 text-[11px] leading-relaxed text-gray-600">
-            Why this exists: Airbnb&apos;s server returns a stripped page
-            to anyone who isn&apos;t a logged-in browser, so server-side
-            scraping can&apos;t see the gallery. The bookmarklet runs in
-            your tab where Airbnb&apos;s own JS has already loaded the
-            photos. Works on every listing.
-          </p>
+
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              DevTools snippet
+            </span>
+            <button
+              type="button"
+              onClick={copySnippet}
+              className={`rounded px-2 py-1 text-[11px] font-semibold transition ${
+                snippetCopied
+                  ? "bg-emerald-600 text-white"
+                  : "bg-gray-900 text-white hover:bg-black"
+              }`}
+            >
+              {snippetCopied ? "✓ Copied" : "Copy snippet"}
+            </button>
+          </div>
+          <textarea
+            readOnly
+            value={consoleSnippet}
+            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+            rows={4}
+            className="w-full resize-y rounded border border-gray-300 bg-gray-50 p-2 font-mono text-[10px] text-gray-800"
+          />
+
+          <div>
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              How to use (~10 seconds)
+            </div>
+            <ol className="list-decimal space-y-1 pl-5 text-[11px] text-gray-700">
+              <li>Open the Airbnb listing in a tab.</li>
+              <li>
+                Click <em>Show all photos</em> so the full gallery
+                renders.
+              </li>
+              <li>
+                Press <kbd className="rounded border bg-gray-100 px-1">F12</kbd>{" "}
+                (or <kbd className="rounded border bg-gray-100 px-1">⌘⌥J</kbd>{" "}
+                on Mac) → click the <strong>Console</strong> tab.
+              </li>
+              <li>
+                Paste the snippet (the &ldquo;Copy snippet&rdquo; button
+                above already has it), press{" "}
+                <kbd className="rounded border bg-gray-100 px-1">Enter</kbd>.
+              </li>
+              <li>
+                A new tab opens to Overlay Studio with the photos already
+                importing.
+              </li>
+            </ol>
+          </div>
+
+          <details className="rounded border border-gray-200 p-2 text-[11px] text-gray-600">
+            <summary className="cursor-pointer font-semibold">
+              Optional: bookmarklet (faster but doesn&apos;t always work)
+            </summary>
+            <p className="mt-2">
+              On browsers without strict CSP enforcement, you can drag
+              this button to your bookmarks bar and click it on any
+              Airbnb tab to skip the Console step. <strong>Airbnb does
+              block this in current Chrome/Firefox</strong> — if clicking
+              the bookmark does nothing, fall back to the DevTools
+              snippet above.
+            </p>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a
+              href={bookmarkletHref}
+              onClick={(e) => {
+                e.preventDefault();
+                alert(
+                  "Drag this button to your bookmarks bar instead of clicking it.",
+                );
+              }}
+              draggable
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-amber-400 px-3 py-1.5 text-xs font-bold text-amber-950 shadow hover:bg-amber-300"
+              title="Drag me to the bookmarks bar"
+            >
+              ⚡ Send to Overlay Studio
+            </a>
+          </details>
         </div>
       )}
 

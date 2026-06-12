@@ -1,19 +1,17 @@
-// One-click bookmarklet for grabbing Airbnb listing photos from the
-// LIVE DOM in the user's own browser tab. Replaces the older clipboard
-// flow — too many sites silently block navigator.clipboard.writeText
-// from bookmarklets — with a URL-hash hand-off:
+// One-shot JS that scrapes Airbnb's photo gallery from the live DOM
+// and hands the URLs off to Overlay Studio via a URL hash. Used in
+// TWO surfaces:
 //
-//   bookmarklet scrapes muscache URLs out of the DOM
-//   → window.open('<our app>/overlay-studio#airbnbphotos=...')
-//   → Overlay Studio reads location.hash on mount and auto-imports
+//   1. Bookmarklet (drag to bookmarks bar). Convenient but a lot of
+//      modern browsers block `javascript:` execution on sites with
+//      strict CSP — Airbnb included. When this fails, the user sees
+//      literally nothing happen.
 //
-// Net UX: drag bookmark to bookmarks bar once (setup), then on any
-// Airbnb listing it's ONE click — bookmark → new tab appears with the
-// photos already importing. No clipboard, no pasting, no manual step.
-//
-// The target origin (preview / production URL) is baked into the
-// bookmarklet at the moment the user drags it from the page, so
-// re-install if you switch environments.
+//   2. DevTools Console paste. The exact same JS, but pasted into
+//      Chrome / Firefox DevTools console on the Airbnb tab. Console
+//      execution bypasses page CSP, so this path works on every
+//      site, every browser. Slightly more clicks than the bookmark
+//      but actually reliable.
 
 const SOURCE_TEMPLATE = `(function(){
   var TARGET = '__TARGET__';
@@ -42,35 +40,29 @@ const SOURCE_TEMPLATE = `(function(){
       if (m) m.forEach(add);
     }
   } catch (err) {
-    alert('Overlay Studio bookmarklet hit an error reading the page: ' + (err && err.message ? err.message : err));
+    alert('Overlay Studio scraper hit an error reading the page: ' + (err && err.message ? err.message : err));
     return;
   }
   if (urls.size === 0) {
-    alert("Bookmarklet ran but found 0 Airbnb photos on this page.\\n\\nFix: click 'Show all photos' on the listing, wait for the grid to fully load, then click the bookmark again. (If you're not on an Airbnb listing tab, switch to one first.)");
+    alert("Found 0 Airbnb photos on this page.\\n\\nFix: click 'Show all photos' on the listing, wait for the grid to fully load, then run this again.");
     return;
   }
   var text = Array.from(urls).join('\\n');
   var url = TARGET + '/overlay-studio#airbnbphotos=' + encodeURIComponent(text);
+  console.log('[Overlay Studio] Found ' + urls.size + ' photos. Opening:', url);
   var ok = false;
   try {
     var w = window.open(url, '_blank');
     ok = !!(w && !w.closed);
   } catch (e) { ok = false; }
-  if (ok) {
-    // Popup opened — done.
-    return;
-  }
-  // Popup blocked. Show a confirm dialog so the user gets a clear
-  // choice between navigating this tab and copying the URL.
-  if (confirm('Found ' + urls.size + ' photos.\\n\\nPopup was blocked by your browser. Click OK to open Overlay Studio in THIS tab, or Cancel to copy the import URL to clipboard.')) {
+  if (ok) return;
+  if (confirm('Found ' + urls.size + ' photos.\\n\\nPopup was blocked. Click OK to open Overlay Studio in THIS tab, or Cancel to copy the URL to clipboard.')) {
     window.location.href = url;
     return;
   }
-  // Try clipboard. If that also fails, show in prompt so they can
-  // hand-select and copy.
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(url).then(function(){
-      alert('Copied the import URL to clipboard. Paste it into a new tab — Overlay Studio will load and auto-import the photos.');
+      alert('Copied the import URL to clipboard. Paste into a new tab to load Overlay Studio.');
     }, function(){
       window.prompt('Copy this URL and paste into a new tab:', url);
     });
@@ -79,14 +71,24 @@ const SOURCE_TEMPLATE = `(function(){
   }
 })();`;
 
+function bakedSource(targetOrigin: string): string {
+  return SOURCE_TEMPLATE.replace(/__TARGET__/g, targetOrigin);
+}
+
+// Bookmarklet: javascript: URL form, minified.
 export function buildBookmarkletUrl(targetOrigin: string): string {
-  const source = SOURCE_TEMPLATE.replace(/__TARGET__/g, targetOrigin);
-  const compact = source.replace(/\s+/g, " ").trim();
+  const compact = bakedSource(targetOrigin).replace(/\s+/g, " ").trim();
   return `javascript:${encodeURIComponent(compact)}`;
 }
 
-// Parse a window.location.hash of the form '#airbnbphotos=<urlenc>'
-// and return the photo URLs. Returns [] for any other hash shape.
+// Console snippet: human-readable JS the user can paste into DevTools
+// Console on the Airbnb tab. Same logic as the bookmarklet but doesn't
+// require the `javascript:` protocol — bypasses page-level CSP that
+// blocks bookmarklet execution on hardened sites like Airbnb.
+export function buildConsoleSnippet(targetOrigin: string): string {
+  return bakedSource(targetOrigin);
+}
+
 export function readAirbnbPhotosFromHash(hash: string): string[] {
   const m = /^#airbnbphotos=(.+)$/.exec(hash);
   if (!m) return [];
@@ -99,3 +101,4 @@ export function readAirbnbPhotosFromHash(hash: string): string[] {
     return [];
   }
 }
+
