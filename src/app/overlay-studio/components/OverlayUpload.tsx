@@ -12,7 +12,7 @@ import {
 } from "@/app/overlay-studio/lib/overlayAnalysis";
 import { enhancePhoto } from "@/app/overlay-studio/lib/photoEnhance";
 import { readFileAsDataUrl } from "@/lib/shared-utils";
-import { pickTip } from "@/app/overlay-studio/lib/designTips";
+import { pickAutoCopy } from "@/app/overlay-studio/lib/overlayHeadlines";
 import type {
   OverlayMedia,
   OverlaySettings,
@@ -41,16 +41,22 @@ export default function OverlayUpload({ media, settings, onSet }: Props) {
       const dataUrl = settings.enhancePhotos ? await enhancePhoto(raw) : raw;
       const auto = await analyzeImage(dataUrl);
       const recipe = carouselRecipe(startingCount + arr.length);
-      const preset = recipe[startingCount + i] ?? "editorial";
+      const slideIdx = startingCount + i;
+      const preset = recipe[slideIdx] ?? "editorial";
       const def = PRESETS[preset];
+      // Headline + body autofill so the slide ships ready-to-export.
+      // pickTip stays as the body for tip-preset slides (already
+      // handled inside pickAutoCopy); other presets get role-specific
+      // copy from the headline bank.
+      const copy = pickAutoCopy(preset, slideIdx);
       fresh.push({
         id: `om_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}_${i}`,
         dataUrl,
         shotType: "living",
         role: def.role,
         preset,
-        headline: "",
-        body: pickTip(startingCount + i),
+        headline: copy.headline,
+        body: copy.body,
         textColor: auto.color,
         position: def.defaultPosition || defaultPositionForBand(auto.band),
         scrim: def.scrim !== "none",

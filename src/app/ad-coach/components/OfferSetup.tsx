@@ -199,6 +199,41 @@ export default function OfferSetup({ onSaved }: Props) {
             />
           </div>
 
+          <details className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
+            <summary className="cursor-pointer font-semibold">
+              Don&apos;t have a Coach Mode winner logged yet? Paste a hook
+              that already worked. (Optional)
+            </summary>
+            <p className="mt-2 text-[11px] leading-relaxed text-gray-600">
+              The Launch Pack needs at least one proven post to base the ad
+              on. If you have one in your head (or in Overlay Studio /
+              Post Builder) but haven&apos;t logged it in Coach Mode,
+              paste its cover hook here and the gate counts it as a yellow
+              content signal — you&apos;ll unlock at <em>caution</em>{" "}
+              instead of <em>green</em>, so you start at a smaller budget.
+            </p>
+            <label className="mt-2 block text-[11px] text-gray-600">
+              Proven hook (cover line of the post)
+              <input
+                type="text"
+                value={offer.provenHook}
+                onChange={(e) => patch("provenHook", e.target.value)}
+                placeholder="e.g. designed for bookings"
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="mt-2 block text-[11px] text-gray-600">
+              One line of body copy (optional — sharpens the AI prompt)
+              <textarea
+                value={offer.provenBody}
+                onChange={(e) => patch("provenBody", e.target.value)}
+                placeholder="e.g. 10 design moves that print money"
+                rows={2}
+                className="mt-1 w-full resize-y rounded border border-gray-300 p-2 text-sm"
+              />
+            </label>
+          </details>
+
           <div className="flex items-center gap-2">
             <button
               type="button"

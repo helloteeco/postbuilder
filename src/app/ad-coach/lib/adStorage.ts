@@ -51,6 +51,14 @@ export interface AdOffer {
   closedOrganically: boolean; // sold at least once without ads?
   canMeasure: boolean; // pro account + can see calls / sales?
   budgetOk: boolean; // can lose ~$140-280 over a 14-day test?
+  // Manual proven-hook escape hatch. If the user hasn't logged anything
+  // in Coach Mode yet but has a post they KNOW resonated, pasting the
+  // hook + an optional body snippet here counts as a yellow content
+  // signal in the Readiness Gate and seeds the Launch Pack's copy
+  // prompt with their real organic words. Without this, brand-new
+  // users were walled out of Ad Coach entirely.
+  provenHook: string;
+  provenBody: string;
 }
 
 export const EMPTY_OFFER: AdOffer = {
@@ -62,6 +70,8 @@ export const EMPTY_OFFER: AdOffer = {
   closedOrganically: false,
   canMeasure: false,
   budgetOk: false,
+  provenHook: "",
+  provenBody: "",
 };
 
 function offerKey(): string {

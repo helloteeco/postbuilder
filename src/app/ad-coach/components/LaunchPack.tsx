@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import CopyButton from "./CopyButton";
 import {
   getAdWinners,
+  makeManualWinner,
   winnerHook,
   type AdWinner,
 } from "@/app/ad-coach/lib/adWinners";
@@ -23,7 +24,15 @@ interface Props {
 }
 
 export default function LaunchPack({ offer, locked, caution }: Props) {
-  const winners = useMemo(() => getAdWinners(), []);
+  // Auto-detected Coach Mode winners come first. If none exist but the
+  // user pasted a manual provenHook in the Offer step, fold that in as
+  // a synthetic winner so the rest of the Launch Pack just works.
+  const winners = useMemo(() => {
+    const auto = getAdWinners();
+    if (auto.length > 0) return auto;
+    const manual = makeManualWinner(offer.provenHook, offer.provenBody);
+    return manual ? [manual] : [];
+  }, [offer.provenHook, offer.provenBody]);
   const [selectedId, setSelectedId] = useState<string | null>(
     winners[0]?.post.id ?? null,
   );
@@ -54,10 +63,20 @@ export default function LaunchPack({ offer, locked, caution }: Props) {
           Step 3 — Launch Pack
         </div>
         <p className="mt-2 text-sm text-gray-600">
-          No proven winner found to run. Log a few posts in Coach Mode and mark
-          (or earn) a winner first — then come back and your ad creative is
-          ready.
+          No proven winner found to run. Two ways to fix this:
         </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
+          <li>
+            Log a few posts in Coach Mode and mark (or earn) a winner.
+            Best signal because the metrics back it up.
+          </li>
+          <li>
+            Or scroll up to <strong>Step 1 — Your offer</strong>, open
+            the &ldquo;Don&apos;t have a Coach Mode winner logged yet?&rdquo;
+            section, and paste a hook from a post that already worked.
+            Unlocks the Launch Pack at caution-level.
+          </li>
+        </ul>
       </section>
     );
   }

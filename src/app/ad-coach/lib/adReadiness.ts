@@ -71,20 +71,35 @@ export function computeReadiness(offer: AdOffer): ReadinessResult {
   });
 
   // 3. Proven content — at least 1 organic winner to run as the ad.
+  // Counts auto-detected Coach Mode winners first; if there are none
+  // but the user pasted a manual provenHook in the Offer step, that
+  // counts as a yellow signal (good enough to start, not as strong as
+  // verified-organic data).
+  const manualHookFilled = offer.provenHook.trim().length > 0;
+  const contentStatus: GateStatus =
+    winners.length >= 2
+      ? "green"
+      : winners.length === 1
+        ? "yellow"
+        : manualHookFilled
+          ? "yellow"
+          : "red";
   items.push({
     id: "content",
     title: "Proven content to run",
-    status: winners.length >= 2 ? "green" : winners.length === 1 ? "yellow" : "red",
+    status: contentStatus,
     detail:
       winners.length >= 2
         ? `You have ${winners.length} proven posts. These become your ads — no guessing on creative.`
         : winners.length === 1
           ? "You have 1 proven post. Workable, but 2+ gives you a backup to rotate in."
-          : "No proven winners tracked yet. Ads should run your best organic content, not untested creative.",
+          : manualHookFilled
+            ? "You marked a hook as proven organically. Workable to launch, but the strongest signal is a logged Coach Mode winner."
+            : "No proven winners tracked yet. Ads should run your best organic content, not untested creative.",
     fix:
-      winners.length >= 1
+      contentStatus !== "red"
         ? undefined
-        : "Post and log a few carousels/reels in Coach Mode first. Once one clears the save or share target (or you mark it a winner), it unlocks here as ad-ready creative.",
+        : "Either log a Coach Mode winner (best) OR paste a hook that already worked organically in the Offer step above. Ads should run your best organic content, not untested creative.",
   });
 
   // 4. Measurement — can they see profile visits / leads / calls.

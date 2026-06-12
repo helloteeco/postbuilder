@@ -69,3 +69,36 @@ export function winnerHook(w: AdWinner): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+// Build a synthetic AdWinner from a user-pasted hook (+ optional body).
+// Used when the user hasn't logged a Coach Mode winner yet but knows
+// they've got a post that resonated organically — lets Launch Pack
+// build the copy prompt with their REAL hook instead of a placeholder.
+// Returns null if the hook is blank.
+export function makeManualWinner(
+  hook: string,
+  body: string,
+): AdWinner | null {
+  const cleanHook = hook.trim();
+  if (!cleanHook) return null;
+  const cleanBody = body.trim();
+  const slides = [
+    { slideNumber: 1, text: cleanHook, isHook: true },
+    ...(cleanBody
+      ? [{ slideNumber: 2, text: cleanBody, isHook: false, isCTA: false }]
+      : []),
+  ];
+  return {
+    post: {
+      id: "manual_hook",
+      title: cleanHook,
+      slides,
+      // The fields below only exist on real LoggedPosts; the copy-prompt
+      // doesn't read them, so casting to satisfy the type is honest.
+    } as unknown as LoggedPost,
+    savePct: 0,
+    sharePct: 0,
+    reach: 0,
+    reason: "you marked it a proven organic post",
+  };
+}
