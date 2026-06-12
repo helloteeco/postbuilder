@@ -12,6 +12,10 @@ import {
 } from "@/app/overlay-studio/lib/overlayTypes";
 import type { OverlayMedia } from "@/app/overlay-studio/lib/overlayTypes";
 import { pickTips } from "@/app/overlay-studio/lib/designTips";
+import {
+  pickStoryCaption,
+  pickStoryFirstComment,
+} from "@/app/overlay-studio/lib/storyScripts";
 
 interface Props {
   media: OverlayMedia[];
@@ -31,12 +35,19 @@ export default function OverlayCaptionPanel({
   const [copied, setCopied] = useState<"cap" | "fc" | null>(null);
 
   function compose() {
-    const captionFn =
-      settings.captionStyle === "warm-design" ? composeWarmDesignCaption : composeCaption;
-    onChange({
-      caption: captionFn(media, settings),
-      firstComment: composeFirstComment(settings),
-    });
+    if (settings.captionStyle === "warm-design") {
+      // Goal-driven story caption + DM redirect — varies by goal +
+      // listing name + day so back-to-back posts read fresh.
+      onChange({
+        caption: pickStoryCaption(settings.goal, settings),
+        firstComment: pickStoryFirstComment(settings.goal, settings),
+      });
+    } else {
+      onChange({
+        caption: composeCaption(media, settings),
+        firstComment: composeFirstComment(settings),
+      });
+    }
   }
 
   async function copy(field: "cap" | "fc", value: string) {

@@ -47,6 +47,17 @@ export type Position =
   | "BC"
   | "BR";
 
+// Goal-driven story arc that drives the carousel's headlines, bodies,
+// caption, and DM redirect. Defined here so OverlaySettings can carry
+// it without a circular import on storyScripts.ts.
+export type CarouselGoal =
+  | "design-tips"
+  | "before-after"
+  | "mistakes"
+  | "roi-proof"
+  | "case-study"
+  | "process";
+
 // Output canvas size — single toggle at the top of the workspace.
 // "post"  = 1080×1350 (IG feed carousel, matches Post Builder)
 // "reel"  = 1080×1920 (IG reel cover, matches Reel Builder)
@@ -82,6 +93,11 @@ export interface OverlayMedia {
 export interface OverlaySettings {
   outputFormat: OutputFormat;
   showProfile: boolean;
+  // Marketer-grade story arc that drives every headline + body + the
+  // caption + the DM redirect. Defaults to design-tips (broadest
+  // reach). User can switch and re-import (or click rewrite) to swap
+  // the whole carousel's voice.
+  goal: CarouselGoal;
   // Bake a soft warm preset into every imported photo. Default on so
   // the carousel has a consistent editorial look without manual color
   // grading. Apply happens once at import time, baked into the dataUrl.
@@ -106,6 +122,7 @@ export interface OverlaySettings {
 export const DEFAULT_SETTINGS: OverlaySettings = {
   outputFormat: "post",
   showProfile: true,
+  goal: "design-tips",
   enhancePhotos: true,
   captionStyle: "warm-design",
   audience: "local",

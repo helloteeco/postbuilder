@@ -12,11 +12,13 @@ import {
   OUTPUT_DIMENSIONS,
   PILLAR_LABELS,
   type Audience,
+  type CarouselGoal,
   type CtaKind,
   type DesignPillar,
   type OutputFormat,
   type OverlaySettings,
 } from "@/app/overlay-studio/lib/overlayTypes";
+import { GOAL_LABELS } from "@/app/overlay-studio/lib/storyScripts";
 
 interface Props {
   settings: OverlaySettings;
@@ -28,11 +30,36 @@ export default function OverlaySetupPanel({ settings, onChange }: Props) {
     onChange({ ...settings, [k]: v });
   }
 
+  const currentGoal = GOAL_LABELS[settings.goal];
+
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-2 text-sm font-bold text-gray-900">Studio settings</div>
 
       <div className="space-y-3">
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              Carousel goal
+            </span>
+            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-indigo-700">
+              {currentGoal.tag}
+            </span>
+          </div>
+          <select
+            value={settings.goal}
+            onChange={(e) => patch("goal", e.target.value as CarouselGoal)}
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm font-medium"
+          >
+            {(Object.keys(GOAL_LABELS) as CarouselGoal[]).map((g) => (
+              <option key={g} value={g}>
+                {GOAL_LABELS[g].label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-[11px] text-gray-500">{currentGoal.help}</p>
+        </div>
+
         <div>
           <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
             Output format

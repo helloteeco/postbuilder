@@ -22,7 +22,7 @@ import {
 } from "@/app/overlay-studio/lib/overlayAnalysis";
 import { scorePhoto } from "@/app/overlay-studio/lib/photoScoring";
 import { enhancePhoto } from "@/app/overlay-studio/lib/photoEnhance";
-import { pickAutoCopy } from "@/app/overlay-studio/lib/overlayHeadlines";
+import { pickStoryCopy } from "@/app/overlay-studio/lib/storyScripts";
 import { readFileAsDataUrl } from "@/lib/shared-utils";
 import {
   OUTPUT_DIMENSIONS,
@@ -186,7 +186,7 @@ export default function OverlayUrlImport({
       const slideIdx = media.length + i;
       const presetKey = recipe[slideIdx] ?? "editorial";
       const def = PRESETS[presetKey];
-      const copy = pickAutoCopy(presetKey, slideIdx);
+      const copy = pickStoryCopy(settings.goal, presetKey, slideIdx, settings);
       fresh.push({
         id: `om_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}_${i}`,
         dataUrl,

@@ -42,10 +42,13 @@ import OverlayUrlImport from "./components/OverlayUrlImport";
 import OverlayPromptPanel from "./components/OverlayPromptPanel";
 import OverlayMediaCard from "./components/OverlayMediaCard";
 import OverlaySlideRender from "./components/OverlaySlideRender";
-import OverlayCaptionPanel, {
-  composeFirstComment,
-  composeWarmDesignCaption,
-} from "./components/OverlayCaptionPanel";
+import OverlayCaptionPanel from "./components/OverlayCaptionPanel";
+import {
+  pickStoryCaption,
+  pickStoryCopy,
+  pickStoryFirstComment,
+} from "@/app/overlay-studio/lib/storyScripts";
+import { carouselRecipe } from "@/app/overlay-studio/lib/overlayPresets";
 import OverlayExportBar from "./components/OverlayExportBar";
 import OverlaySendToTracker from "./components/OverlaySendToTracker";
 import RecentOverlays from "./components/RecentOverlays";
@@ -172,13 +175,37 @@ export default function OverlayStudioPage() {
     if (media.length === 0) return;
     if (caption.trim() || firstComment.trim()) return;
     if (settings.captionStyle === "warm-design") {
-      setCaption(composeWarmDesignCaption(media, settings));
-      setFirstComment(composeFirstComment(settings));
+      // Goal-driven story caption + DM redirect.
+      setCaption(pickStoryCaption(settings.goal, settings));
+      setFirstComment(pickStoryFirstComment(settings.goal, settings));
     }
-    // The else branch (plain) waits for the user to click Auto-build
-    // since plain mode just joins photo bodies and they may want to
-    // edit those first.
+    // The else branch (plain) waits for the user to click Auto-build.
   }, [media, caption, firstComment, settings]);
+
+  // When the goal changes AFTER upload, rewrite every slide's
+  // headline + body to match the new story arc — but ONLY when the
+  // user hasn't customized anything yet. We detect "customized" by
+  // checking whether the current value still matches what some other
+  // goal's pool would have produced for that slot. If everything
+  // matches a known story slot, it's safe to rewrite.
+  const goalRef = useRef(settings.goal);
+  useEffect(() => {
+    if (goalRef.current === settings.goal) return;
+    goalRef.current = settings.goal;
+    if (media.length === 0) return;
+    const recipe = carouselRecipe(media.length);
+    setMedia((prev) =>
+      prev.map((m, i) => {
+        const preset = recipe[i] ?? m.preset;
+        const next = pickStoryCopy(settings.goal, preset, i, settings);
+        return { ...m, headline: next.headline, body: next.body, preset };
+      }),
+    );
+    if (settings.captionStyle === "warm-design") {
+      setCaption(pickStoryCaption(settings.goal, settings));
+      setFirstComment(pickStoryFirstComment(settings.goal, settings));
+    }
+  }, [settings.goal, settings, media.length, caption, firstComment]);
 
   const dim = OUTPUT_DIMENSIONS[settings.outputFormat];
   const selected = media.find((m) => m.id === selectedId) ?? null;

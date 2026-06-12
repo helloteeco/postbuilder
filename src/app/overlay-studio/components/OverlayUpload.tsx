@@ -12,7 +12,7 @@ import {
 } from "@/app/overlay-studio/lib/overlayAnalysis";
 import { enhancePhoto } from "@/app/overlay-studio/lib/photoEnhance";
 import { readFileAsDataUrl } from "@/lib/shared-utils";
-import { pickAutoCopy } from "@/app/overlay-studio/lib/overlayHeadlines";
+import { pickStoryCopy } from "@/app/overlay-studio/lib/storyScripts";
 import type {
   OverlayMedia,
   OverlaySettings,
@@ -44,11 +44,11 @@ export default function OverlayUpload({ media, settings, onSet }: Props) {
       const slideIdx = startingCount + i;
       const preset = recipe[slideIdx] ?? "editorial";
       const def = PRESETS[preset];
-      // Headline + body autofill so the slide ships ready-to-export.
-      // pickTip stays as the body for tip-preset slides (already
-      // handled inside pickAutoCopy); other presets get role-specific
-      // copy from the headline bank.
-      const copy = pickAutoCopy(preset, slideIdx);
+      // Headline + body autofill driven by the user's chosen story
+      // arc (settings.goal). Cover gets the goal's hook; CTA gets the
+      // goal's DM redirect; middle slides rotate the goal's meat
+      // pool so 8 photos never repeat.
+      const copy = pickStoryCopy(settings.goal, preset, slideIdx, settings);
       fresh.push({
         id: `om_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}_${i}`,
         dataUrl,
