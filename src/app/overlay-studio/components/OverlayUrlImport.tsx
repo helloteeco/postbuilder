@@ -166,7 +166,9 @@ export default function OverlayUrlImport({
       setStatus(`Downloading ${i}/${n}…`);
     });
     if (downloads.length === 0) {
-      setStatus("Photos came back empty. The image host may be blocking us.");
+      setStatus(
+        `Couldn't download any of those ${urls.length} URLs. If they came from the bookmarklet, make sure you opened 'Show all photos' on the Airbnb listing BEFORE clicking the bookmark (so the photos finished loading in the DOM). Otherwise the URLs may have been signed-link / expired versions — re-run the bookmarklet and paste fresh.`,
+      );
       return;
     }
     setStatus(`Scoring ${downloads.length} photos…`);
@@ -390,6 +392,43 @@ interface DownloadedPhoto {
   dataUrl: string;
 }
 
+// Try fetching an image directly from the browser first (muscache and
+// most CDNs serve image GETs with CORS-allow-all), then fall back to
+// our /api/proxy-image route if the direct fetch fails. The direct
+// path matters because Airbnb's CDN sometimes 403s server-IP egress
+// (Vercel / DC IPs), but happily serves the user's residential IP.
+async function downloadOne(url: string): Promise<DownloadedPhoto | null> {
+  // Direct first.
+  try {
+    const r = await fetch(url, {
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
+    });
+    if (r.ok) {
+      const blob = await r.blob();
+      if (blob.type.startsWith("image/")) {
+        return { url, dataUrl: await readFileAsDataUrl(blob) };
+      }
+    }
+  } catch {
+    // CORS-blocked or network error — fall through to the proxy.
+  }
+  // Proxy fallback.
+  try {
+    const r = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`);
+    if (r.ok) {
+      const blob = await r.blob();
+      if (blob.type.startsWith("image/")) {
+        return { url, dataUrl: await readFileAsDataUrl(blob) };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 async function downloadAll(
   urls: string[],
   onProgress: (done: number, total: number) => void,
@@ -400,17 +439,8 @@ async function downloadAll(
   const limited = urls.slice(0, 60);
   for (let i = 0; i < limited.length; i++) {
     onProgress(i + 1, limited.length);
-    try {
-      const r = await fetch(
-        `/api/proxy-image?url=${encodeURIComponent(limited[i])}`,
-      );
-      if (!r.ok) continue;
-      const blob = await r.blob();
-      if (!blob.type.startsWith("image/")) continue;
-      out.push({ url: limited[i], dataUrl: await readFileAsDataUrl(blob) });
-    } catch {
-      // skip and continue
-    }
+    const got = await downloadOne(limited[i]);
+    if (got) out.push(got);
   }
   return out;
 }
