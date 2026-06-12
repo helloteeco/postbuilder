@@ -1,0 +1,311 @@
+import { NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
+import type { PostBuilderParams, RawCarouselPost } from "@/lib/post-templates";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+interface AnalyzeRequestBody {
+  topic?: string;
+  competitorText?: string;
+  competitorImages?: string[]; // data URLs (data:image/png;base64,...)
+  params: PostBuilderParams;
+  // When user already has raw long-form content they wrote and want it
+  // compressed into slides rather than analyzing a competitor.
+  rawSource?: string;
+}
+
+function parseDataUrl(
+  dataUrl: string,
+): { mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } | null {
+  const m = /^data:(image\/(?:png|jpeg|jpg|gif|webp));base64,(.+)$/.exec(
+    dataUrl,
+  );
+  if (!m) return null;
+  const raw = m[1] === "image/jpg" ? "image/jpeg" : m[1];
+  return {
+    mediaType: raw as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+    data: m[2],
+  };
+}
+
+function buildSystemPrompt(params: PostBuilderParams): string {
+  return `You are a ghost-writer for a top social media creator. You produce Instagram/Twitter carousel posts in the exact voice, structure, and compression of your client.
+
+Your client's audience: ${params.audience}.
+Your client's tone: ${params.tone}.
+Reading level target: ${params.readingLevel}. Use short, plain words. No jargon. No fluff.
+
+CARDINAL RULES — follow without exception:
+1. Return ONLY valid JSON matching the schema shown below. No commentary before or after.
+2. Produce no more than ${Math.min(params.slideCount, 10)} slides TOTAL. Never exceed 10. Produce fewer if the content doesn't need more.
+3. Slide 1 is ALWAYS type "hook-opener". COVER slide: one punchy headline + optional subtitle. No items or footer. Rendered at 132px on a 920px-wide canvas. A clean cover wraps to 3 BALANCED lines for the headline and 1 line for the subtitle.
+   HOOK STYLE — write the cover the way a top creator does. Study this pattern and match it:
+   • LEAD WITH THE MOST ARRESTING TOKEN — a number, a dollar amount, or a recognizable name. ("13 AI tools…", "$25K down…", "Trump made…", "Buffett's last…", "$100,000+ a month…")
+   • USE PERIODS AS BEATS to create rhythm and pack short lines. ("$25K down. $70K a year." · "Cambodian. No English. 50+ rentals." · "1 thing a year. $10M at 65.")
+   • STATE A BOLD, COMPLETE CLAIM, not a topic label. ("Renting now costs more than owning" — not "Rent vs own". "How W2 earners pay zero tax" — not "Tax tips".)
+   • EMBED ONE SPECIFIC NUMBER OR PROOF right in the headline whenever the topic allows ($, %, a year count, a timeframe).
+   • TENSION / CURIOSITY works: "6 ways to get paid. 1 keeps you broke." · "Towns no one talks about." · "The gift most won't ask for."
+   SUBTITLE STYLE — the subtitle is the PROOF layer under the claim. It ALWAYS adds new, concrete information the headline doesn't state: a price range, a timeframe, a mechanism, a location, a named person. ("Homes $212K to $314K. Verified." · "3 hours a week. $50/mo per property." · "Pharmacist in CA. Own in Toledo OH." · "How to use it before Dec 31."). One line. Often its own period-beats. NEVER a rephrase of the headline — if it would just restate the headline, omit it.
+   FIT — DO NOT cut words off:
+   • TARGET 30-40 characters for the headline (period-beats can carry up to ~44 if every line still fits). No single word over 12 characters (longer words orphan a line).
+   • Before you output, mentally lay the headline out at 132pt: each line fits ~12 characters; split it into the 3 lines it would wrap to. If any line strands a single short word, if any word would break mid-word, or if it spills past 3 lines — REWRITE. Pick shorter synonyms, add a period beat to control the break, drop filler ("the", "a", "is"), or choose a tighter angle. A different angle beats a headline that overflows.
+   • Subtitle: TARGET ≤42 chars so it stays on ONE line at 48px. 60 is a hard cap that risks wrapping.
+   Treat slide 1 like a magazine cover. Every word earns its place.
+4. Final slide is always type "cta" — DM keyword, free resource, or clear next step.
+5. Compress mercilessly. Each slide must be SCANNABLE in under 4 seconds.
+6. Per-slide budgets (HARD LIMITS — never exceed):
+   - Body text across a slide: under ~${params.maxCharsBody} characters TOTAL.
+   - Bullets per slide: max ${params.maxBullets}.
+   - Each bullet: under ~${params.maxCharsBullet} characters AND must fit on ONE LINE when rendered at 48px on a 920px-wide canvas. Roughly: if it's more than 6-7 words, it is too long.
+   - Headlines (body slides): under ~60 characters. Under ~8 words.
+   - Cover headline (slide 1): TARGET 32-38 chars, 5-7 words, 3 balanced lines when rendered. Hard cap 40 chars / 7 words / 3 lines. No individual word over 12 chars. See rule 3 for the line-fit verification step.
+   - Cover subtitle (slide 1): optional; TARGET ≤45 chars to guarantee single-line fit at 48pt across the 920px canvas (60 chars is a hard cap and risks 2-line wrap). Must add NEW VALUE — a sharper detail, a specific number, a date, a concrete payoff. Do NOT just paraphrase the headline. If the subtitle is just rephrasing, drop it.
+   - Paragraphs: under ~20 words each. Prefer 2-3 short paragraphs over one long one.
+7. NEVER flood a slide. If a point needs more space, split it into another slide or cut the word count.
+8. If the source copy is long, REWRITE — do not paraphrase. Your job is to cut, not to preserve.
+9. Use the client's signature structure when relevant:
+   - Cover slide (slide 1, hook-opener)
+   - Personal story / credibility slide
+   - Criteria / framework slide (bullets)
+   - Repeated detail slides (ranked items with bullets + stats)
+   - CTA slide (final slide)
+10. Inline bold via **double asterisks** is REQUIRED on every slide. Pick 2-4 high-impact words or short phrases per slide and wrap them in ** ** to stop the scroll. On the cover (slide 1), bold the 1-3 words that are the whole point of the post (e.g. **$500K**, **hidden**, **actually buy**, **Passive Income**, **Overrated**). Never bold a whole sentence; bold the nouns and numbers inside it. IMPORTANT: Only ever use DOUBLE asterisks (**like this**) — never use single asterisks (*like this*) or any other markdown. If you want emphasis, always use ** **.
+11. Numbers should feel specific, not rounded ($75,940 > "about $76K"). If the source gives a vague number, keep it vague — do not fabricate.
+12. NO INSIDER JARGON IN THE COVER HEADLINE OR SUBTITLE (slide 1). The cover is for an outsider scrolling past who has zero context on the niche. They should understand instantly without Googling. Specifically:
+    a. Banned in slide 1 headline + subtitle: niche acronyms (STR, ADR, RevPAR, OTA, PMS, ARV, BRRRR, COC, KPI, MQL, CAC, LTV, EBITDA, ROAS, NPS, etc.), industry shorthand ("the loophole", "1031", "buy box", "cap rate", "the stack") unless the term is universally known to a non-specialist.
+    b. Spelling the term out in parentheses ("STR (short term rental)") is NOT a fix — it eats valuable hook space. Rephrase the hook so the term isn't needed at all.
+    c. Prefer everyday brand names (Airbnb, Amazon, Google, Uber) when they communicate the same idea as a niche term ("Airbnb" instead of "STR").
+    d. Prefer plain English (rental, guest, booking, customer, deal, profit) over insider words (unit, ADR, occupancy, lead, MRR).
+    e. Bad: "8 things I learned starting my STR." Good: "8 things I learned hosting my first Airbnb." or "8 lessons from my first rental."
+    f. THE BODY SLIDES (sections 2-9) MAY use precise industry terms — by then the reader has chosen to be in. Body slides explain; covers attract.
+13. NUMBERING / ENUMERATION CONSISTENCY (read carefully — this is the most common failure mode):
+    a. Never write a numbered item — "5.", "Step 5", "Tier 5", "#5", "Rule 5", etc. — unless items 1 through 4 of that exact same series have already appeared earlier in the carousel, in order. No orphan numbers. No skipping.
+    b. If the cover headline promises a count ("6 rural markets I'd buy", "5 rules", "7 mistakes"), the body slides must deliver EXACTLY that many items, numbered 1 through N in order, no gaps, no extras. If you can't deliver the promised count cleanly within the slide budget, lower the number on the cover to match.
+    c. Cross-slide numbering is the JOB of the "market-detail" slide type — its \`rank\` field is the sequence number. When you have a list of N ranked items spanning multiple slides, use one "market-detail" slide per item with rank: 1, rank: 2, ... rank: N consecutively. Do NOT mix in freeform "5." prefixes inside other slide types' headings or paragraphs to extend the count.
+    d. A "numbered-list" slide is SELF-CONTAINED. Its \`items\` array stands alone (rendered as 1., 2., 3...). Do not start a numbered-list at any number other than 1, and do not continue a numbered-list's count onto a following slide. If you need more than ${params.maxBullets} numbered items, use market-detail slides instead.
+    e. Same rule for named tiers/levels/phases/steps: never reference "Tier 3" or "Phase 2" or "Step 4" without first establishing what Tier 1 / Phase 1 / Step 1 was. If you can't fit the setup, drop the tier/phase/step framing entirely and rephrase.
+    f. Do not put a literal number prefix ("1.", "2.", "3.") at the start of a bullet inside criteria-bullets or hook-opener.items — those slide types are unordered. Use numbered-list or market-detail when order matters.
+
+SLIDE TYPES (use the matching \`type\` field):
+- "hook-opener": { headline: string; subtitle?: string; bg?: "white" | "soft" | "yellow" | "dark" | "cream" | "forest" | "navy" }   // COVER slide, slide 1 only. Just headline + optional one-line subtitle. Omit items/footer. Pick bg based on the hook's energy — every option is contrast-tuned so text is always legible:
+//   • "white"  — crisp, default, neutral hooks
+//   • "soft"   — pale Wilson-style blue-grey, friendly / educational / professional hooks (teal accent)
+//   • "yellow" — celebratory / money / wealth-positive hooks
+//   • "dark"   — contrarian / "nobody talks about this" / serious hooks
+//   • "cream"  — warm storytelling / lifestyle hooks (terracotta accent)
+//   • "forest" — nature / patient-investor / long-term hooks (amber accent)
+//   • "navy"   — premium / authority / numbers-driven hooks (coral accent)
+- "personal-story": { paragraphs: string[] }   // 2-5 short paragraphs, **bold** allowed
+- "criteria-bullets": { heading: string; bullets: string[]; footer?: string }
+- "market-detail": { rank: number; title: string; subtitle?: string; bullets: string[]; stats?: {label: string; value: string}[] }
+- "numbered-list": { heading: string; items: string[] }
+- "plain-text": { paragraphs: string[] }
+- "cta": { paragraphs: string[] }   // **bold** the keyword/CTA phrase
+
+OUTPUT SHAPE (exact keys, order does not matter):
+{
+  "slides": [
+    { "type": "hook-opener", "headline": "...", "items": ["..."], "footer": ["..."] },
+    ...
+  ],
+  "caption": "A 2-4 paragraph Instagram caption. Includes a hook, a short value stack, and ends with the DM keyword or CTA. Use plain line breaks. Do NOT include hashtags at the end — leave them out.",
+  "hooks": [
+    "Alt hook 1 (different angle)",
+    "Alt hook 2 (different angle)",
+    "Alt hook 3 (different angle)"
+  ]
+}
+
+Return the JSON only — no prose, no markdown fences.`;
+}
+
+function buildUserPrompt(body: AnalyzeRequestBody): string {
+  const lines: string[] = [];
+  if (body.topic) {
+    lines.push(`TOPIC / ANGLE: ${body.topic}`);
+    lines.push("");
+  }
+  if (body.rawSource) {
+    lines.push("SOURCE CONTENT (compress this into the carousel):");
+    lines.push(body.rawSource);
+    lines.push("");
+  }
+  if (body.competitorText) {
+    lines.push("COMPETITOR POST (study the structure and angle; do NOT copy wording — rewrite in our voice):");
+    lines.push(body.competitorText);
+    lines.push("");
+  }
+  if (body.competitorImages && body.competitorImages.length > 0) {
+    lines.push(
+      "Competitor screenshots are attached below. Study their hook pattern, slide count, structure, and pacing — then produce OUR version on the same topic.",
+    );
+    lines.push("");
+  }
+  lines.push(
+    `Produce the carousel now. Remember: exactly ${body.params.slideCount} slides if the content supports it, ${body.params.readingLevel} reading level, audience = ${body.params.audience}. Return JSON only.`,
+  );
+  return lines.join("\n");
+}
+
+function extractJson(text: string): RawCarouselPost {
+  // Strip accidental markdown fences
+  const cleaned = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+  // If the model added any prose, grab the outermost JSON object.
+  const first = cleaned.indexOf("{");
+  const last = cleaned.lastIndexOf("}");
+  if (first === -1 || last === -1 || last <= first) {
+    throw new Error("No JSON object found in model response");
+  }
+  const slice = cleaned.slice(first, last + 1);
+  const parsed = JSON.parse(slice) as RawCarouselPost;
+  if (!parsed.slides || !Array.isArray(parsed.slides)) {
+    throw new Error("Response missing slides array");
+  }
+  if (typeof parsed.caption !== "string") parsed.caption = "";
+  if (!Array.isArray(parsed.hooks)) parsed.hooks = [];
+  return parsed;
+}
+
+export async function POST(req: Request) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "NO_KEY",
+        message:
+          "ANTHROPIC_API_KEY is not set on the server. Add it to .env.local (for local dev) or Vercel → Project → Settings → Environment Variables (for deploys), then restart/redeploy.",
+      },
+      { status: 500 },
+    );
+  }
+
+  let body: AnalyzeRequestBody;
+  try {
+    body = (await req.json()) as AnalyzeRequestBody;
+  } catch {
+    return NextResponse.json(
+      { ok: false, code: "BAD_JSON", message: "Request body was not valid JSON." },
+      { status: 400 },
+    );
+  }
+
+  if (!body.params) {
+    return NextResponse.json(
+      { ok: false, code: "MISSING_PARAMS", message: "params field is required." },
+      { status: 400 },
+    );
+  }
+
+  const client = new Anthropic({ apiKey });
+
+  // Build the content array — text first, then any attached images.
+  const content: Anthropic.MessageParam["content"] = [
+    { type: "text" as const, text: buildUserPrompt(body) },
+  ];
+
+  if (body.competitorImages) {
+    for (const dataUrl of body.competitorImages) {
+      const parsed = parseDataUrl(dataUrl);
+      if (!parsed) continue;
+      content.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: parsed.mediaType,
+          data: parsed.data,
+        },
+      });
+    }
+  }
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-opus-4-7",
+      max_tokens: 16000,
+      thinking: { type: "adaptive" },
+      system: buildSystemPrompt(body.params),
+      messages: [{ role: "user", content }],
+    });
+
+    // Find the first text block in the response.
+    let text = "";
+    for (const block of response.content) {
+      if (block.type === "text") {
+        text += block.text;
+      }
+    }
+
+    if (!text.trim()) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "EMPTY_RESPONSE",
+          message:
+            "Claude returned no text. Try again, or reduce the number of attached images.",
+        },
+        { status: 502 },
+      );
+    }
+
+    let result: RawCarouselPost;
+    try {
+      result = extractJson(text);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "PARSE_FAILED",
+          message: `Could not parse Claude's response as JSON: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+          rawText: text.slice(0, 2000),
+        },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json({ ok: true, post: result });
+  } catch (err) {
+    if (err instanceof Anthropic.AuthenticationError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "AUTH_FAILED",
+          message:
+            "ANTHROPIC_API_KEY is set but invalid. Check the value in .env.local.",
+        },
+        { status: 401 },
+      );
+    }
+    if (err instanceof Anthropic.RateLimitError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "RATE_LIMITED",
+          message: "Rate limit hit. Wait a few seconds and try again.",
+        },
+        { status: 429 },
+      );
+    }
+    if (err instanceof Anthropic.APIError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "API_ERROR",
+          message: `Claude API error ${err.status}: ${err.message}`,
+        },
+        { status: 502 },
+      );
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { ok: false, code: "UNKNOWN", message: msg },
+      { status: 500 },
+    );
+  }
+}

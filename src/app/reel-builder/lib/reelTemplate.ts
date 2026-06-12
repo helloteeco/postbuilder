@@ -1,0 +1,246 @@
+// Visual constants + shared types for the Reel Builder. Layout uses
+// ABSOLUTE positioning for each major block so headlines, subtitles,
+// and the profile row land in fixed pixel positions regardless of
+// content length — no flex drift.
+//
+// The y-coordinates are tuned so that when the rendered MP4 / PNG is
+// posted to Instagram Reels:
+//   • Headline starts at ~20% from the top (matches the visual feel
+//     of a Post Builder cover post in the IG feed).
+//   • Profile row sits comfortably above the IG bottom-UI overlay
+//     zone (which covers ~30% of the screen with caption / like /
+//     comment / share buttons).
+//   • "See description ↓" sits in the top safe zone above the
+//     headline, tight to its chevron (no oceanic gap).
+//
+// Per the original spec, Reel Builder mirrors Post Builder's visual
+// language but does NOT import from CarouselSlide.tsx.
+
+// 9:16 portrait, the IG Reel cover spec.
+export const REEL_WIDTH = 1080;
+export const REEL_HEIGHT = 1920;
+
+// ── Layout strategy ────────────────────────────────────────────────
+//
+// To keep the user's IG profile grid uniform, the reel EMBEDS a
+// pixel-identical 1080×1350 Post Builder cover (the same 4:5 ratio IG
+// uses for feed posts) centered vertically inside the 1080×1920
+// reel. This way:
+//
+//   • When IG shows the reel in the 4:5 profile-grid cell (the most
+//     common modern grid), it center-crops the reel to 1080×1350
+//     starting at y=285 — which captures the embedded cover EXACTLY,
+//     so the grid thumbnail is identical to a Post Builder feed post.
+//
+//   • When IG center-crops to 1:1 (older grid view, story sticker,
+//     etc.), it takes the middle 1080×1080 — y=420 to y=1500. Inside
+//     the embedded cover that's relative y=135 to y=1215, the same
+//     center-crop a Post Builder feed post would get. Headline + face
+//     land at identical positions.
+//
+//   • When played at full 9:16 in the Reels tab, the cover content
+//     sits in the middle of the screen with "See description ↓" above
+//     and an empty bg band below (where IG's UI overlays anyway).
+//
+// The embedded cover uses the EXACT same padding (240/80/380), font
+// sizes (132 headline, 48 subtitle), and compact profile row (avatar
+// 128, name 46pt, handle 38pt) as Post Builder. That's what keeps
+// the text + face uniform between both formats.
+
+// Cover area embedded inside the reel.
+export const COVER_AREA_TOP = 285; // (1920 - 1350) / 2 = 285
+export const COVER_AREA_HEIGHT = 1350;
+export const COVER_PADDING_TOP = 240;
+export const COVER_PADDING_BOTTOM = 380;
+export const COVER_PADDING_X = 80;
+// Hook-block max-height inside the cover. Same value Post Builder
+// uses to keep the headline from crashing into the profile row.
+export const COVER_HOOK_MAX_HEIGHT = 510;
+
+// "See description ↓" sits BELOW the profile row, inside the cover's
+// bottom-padding zone. Single clean line with the arrow integrated
+// into the text — no second giant chevron underneath. The two-line
+// "white text + bigger accent chevron" stack felt tacky and visually
+// heavy; one line reads as a quiet, native-feeling affordance.
+//
+// Position rationale:
+//   • Visible inside IG's 4:5 profile-grid crop (y=285-1635) so it
+//     reads as a bird's-eye-view marker for "this post is a reel"
+//     when scrolling the user's grid.
+//   • Above where IG's bottom-UI overlay starts (~y=1500) so it
+//     stays readable during playback.
+//   • Doesn't fight the headline / subtitle / profile hierarchy at
+//     the top of the cover.
+export const SEE_DESC_TEXT_Y = 1310;
+
+// ── Background palettes ────────────────────────────────────────────
+// Mirror Post Builder's full 7-palette set + custom so the reel's bg
+// picker has 1:1 parity with the carousel's. "custom" lets the user
+// pick any bg + accent hex; foreground / muted are derived from the
+// bg's relative luminance (light bg → dark text, dark bg → light
+// text), same logic Post Builder uses.
+export type ReelBg =
+  | "white"
+  | "soft"
+  | "yellow"
+  | "dark"
+  | "cream"
+  | "forest"
+  | "navy"
+  | "custom";
+
+export interface ReelBgPalette {
+  bg: string;
+  fg: string;
+  muted: string;
+  accent: string;
+}
+
+// Preset palettes only — "custom" is computed at render time via
+// customPaletteFor() so it's not in this map.
+export const REEL_BG_PALETTES: Record<Exclude<ReelBg, "custom">, ReelBgPalette> = {
+  white: { bg: "#FFFFFF", fg: "#0F1419", muted: "#6B7280", accent: "#2E86AB" },
+  soft: { bg: "#EEF2F6", fg: "#0F1419", muted: "#6B7280", accent: "#3290B5" },
+  yellow: { bg: "#F5B935", fg: "#0F1419", muted: "#5C4A1F", accent: "#0F1419" },
+  dark: { bg: "#0F1419", fg: "#FFFFFF", muted: "#9CA3AF", accent: "#5FB4D2" },
+  cream: { bg: "#F7F0E1", fg: "#2A1F0F", muted: "#76624A", accent: "#B8501F" },
+  forest: { bg: "#1B3A2F", fg: "#F5F0E1", muted: "#9DBAA9", accent: "#E8B042" },
+  navy: { bg: "#0F2645", fg: "#F8FAFC", muted: "#94A8C7", accent: "#FF8C5C" },
+};
+
+export const REEL_BG_LABELS: Record<ReelBg, string> = {
+  white: "White",
+  soft: "Soft",
+  yellow: "Yellow",
+  dark: "Dark",
+  cream: "Cream",
+  forest: "Forest",
+  navy: "Navy",
+  custom: "Custom",
+};
+
+export const REEL_BG_ORDER: ReelBg[] = [
+  "dark",
+  "navy",
+  "forest",
+  "white",
+  "soft",
+  "yellow",
+  "cream",
+  "custom",
+];
+
+// Default hex codes when a card switches to "custom" but the user
+// hasn't picked colors yet. Match the dark palette so there's no
+// visual flash.
+export const DEFAULT_CUSTOM_BG = "#0F1419";
+export const DEFAULT_CUSTOM_ACCENT = "#5FB4D2";
+
+// WCAG relative luminance — used to auto-pick foreground / muted
+// colors so a custom bg always reads cleanly. Same formula Post
+// Builder uses for its custom cover bg.
+function relativeLuminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 1;
+  const v = m[1];
+  const r = parseInt(v.slice(0, 2), 16) / 255;
+  const g = parseInt(v.slice(2, 4), 16) / 255;
+  const b = parseInt(v.slice(4, 6), 16) / 255;
+  const f = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+function normHex(hex: string | undefined, fallback: string): string {
+  if (!hex || !/^#?[0-9a-f]{6}$/i.test(hex.trim())) return fallback;
+  const trimmed = hex.trim();
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+}
+
+function customPaletteFor(
+  customBg: string | undefined,
+  customAccent: string | undefined,
+): ReelBgPalette {
+  const bg = normHex(customBg, DEFAULT_CUSTOM_BG);
+  const isLightBg = relativeLuminance(bg) > 0.5;
+  return {
+    bg,
+    fg: isLightBg ? "#0F1419" : "#FFFFFF",
+    muted: isLightBg ? "#6B7280" : "#9CA3AF",
+    accent: normHex(
+      customAccent,
+      isLightBg ? "#2E86AB" : DEFAULT_CUSTOM_ACCENT,
+    ),
+  };
+}
+
+// Resolve any ReelBg (including "custom") into a concrete palette.
+// All renderers go through this helper so a single change point
+// determines how each bg is interpreted.
+export function paletteFor(
+  bg: ReelBg,
+  customBg?: string,
+  customAccent?: string,
+): ReelBgPalette {
+  if (bg === "custom") return customPaletteFor(customBg, customAccent);
+  return REEL_BG_PALETTES[bg];
+}
+
+export type ReelHookAngle =
+  | "counter-intuitive"
+  | "list-promise"
+  | "specific-number"
+  | "news-driven"
+  | "question";
+
+export const HOOK_ANGLE_LABELS: Record<ReelHookAngle, string> = {
+  "counter-intuitive": "Counter-intuitive",
+  "list-promise": "List promise",
+  "specific-number": "Specific number",
+  "news-driven": "News-driven",
+  question: "Question",
+};
+
+export interface ReelVariation {
+  angle: ReelHookAngle;
+  hookHeadline: string;
+  hookSubtitle: string;
+  caption: string;
+}
+
+export interface ReelGenerationResult {
+  variations: ReelVariation[];
+}
+
+// ── Caption + headline limits ──────────────────────────────────────
+export const CAPTION_HARD_CAP = 2200;
+export const CAPTION_SOFT_CAP = 2000;
+
+export const HEADLINE_MAX_CHARS = 40;
+export const HEADLINE_MAX_WORDS = 7;
+export const HEADLINE_MAX_WORD_CHARS = 12;
+export const SUBTITLE_MAX_CHARS = 60;
+
+// Pick a default bg for a variation index. Default to "dark" (matches
+// the user's reference screenshot), then cycle navy → forest so the 3
+// cards look visually distinct without the user having to override.
+export function defaultBgForIndex(i: number): ReelBg {
+  const order: ReelBg[] = ["dark", "navy", "forest"];
+  return order[i % order.length];
+}
+
+// Truncate a caption at the last full sentence before the hard cap.
+// Used when the model overshoots — we never present an over-cap
+// caption to the user.
+export function truncateAtSentence(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const slice = text.slice(0, maxChars);
+  const candidates = [".", "!", "?", "\n\n"];
+  let cutAt = -1;
+  for (const t of candidates) {
+    const i = slice.lastIndexOf(t);
+    if (i > cutAt) cutAt = i;
+  }
+  if (cutAt > 0) return slice.slice(0, cutAt + 1).trimEnd() + "…";
+  return slice.trimEnd() + "…";
+}
