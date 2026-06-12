@@ -14,7 +14,7 @@
 // Either path produces the same OverlayMedia[] with auto headlines +
 // design-tip bodies seeded so the slide deck is export-ready.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { carouselRecipe, PRESETS } from "@/app/overlay-studio/lib/overlayPresets";
 import {
   analyzeImage,
@@ -24,7 +24,10 @@ import { scorePhoto } from "@/app/overlay-studio/lib/photoScoring";
 import { enhancePhoto } from "@/app/overlay-studio/lib/photoEnhance";
 import { pickStoryCopy } from "@/app/overlay-studio/lib/storyScripts";
 import { readFileAsDataUrl } from "@/lib/shared-utils";
-import { buildBookmarkletUrl } from "@/app/overlay-studio/lib/bookmarklet";
+import {
+  buildBookmarkletUrl,
+  readAirbnbPhotosFromHash,
+} from "@/app/overlay-studio/lib/bookmarklet";
 import {
   OUTPUT_DIMENSIONS,
   type OutputFormat,
@@ -97,6 +100,38 @@ export default function OverlayUrlImport({
   const [pick, setPick] = useState<Pick>("top10");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [bookmarkletHref, setBookmarkletHref] = useState<string>("javascript:void(0)");
+
+  // Compute the bookmarklet URL once the window object is available.
+  // The bookmarklet bakes in window.location.origin so it opens THIS
+  // deployment when the user later clicks it from an Airbnb tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setBookmarkletHref(buildBookmarkletUrl(window.location.origin));
+  }, []);
+
+  // Auto-import when the page is opened with #airbnbphotos=… in the
+  // URL hash — that's how the bookmarklet hands off photos from an
+  // Airbnb tab. Reads the hash exactly once, clears it (so refresh
+  // doesn't re-import), then runs the same pipeline as the manual
+  // Paste image URLs flow.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const incoming = readAirbnbPhotosFromHash(window.location.hash);
+    if (incoming.length === 0) return;
+    history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search,
+    );
+    setMode("paste");
+    setPasted(incoming.join("\n"));
+    // Defer to next tick so state propagates before the import fires.
+    setTimeout(() => {
+      void downloadScoreAndPush(incoming);
+    }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function runUrl() {
     const trimmed = url.trim();
@@ -273,7 +308,7 @@ export default function OverlayUrlImport({
           </p>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a
-            href={buildBookmarkletUrl()}
+            href={bookmarkletHref}
             onClick={(e) => {
               e.preventDefault();
               alert(
@@ -287,17 +322,17 @@ export default function OverlayUrlImport({
             ⚡ Send to Overlay Studio
           </a>
           <p className="text-[11px] leading-relaxed text-gray-600">
-            Then for any Airbnb listing:
+            Then for any Airbnb listing — <strong>one click</strong>:
           </p>
           <ol className="list-decimal space-y-1 pl-5 text-[11px] text-gray-700">
             <li>Open the listing in a tab.</li>
             <li>
-              Click <em>Show all photos</em> so they all render in the DOM.
+              Click <em>Show all photos</em> so the full gallery loads in
+              the DOM.
             </li>
-            <li>Click the bookmark — photo URLs auto-copy.</li>
             <li>
-              Come back here, switch to <strong>Paste image URLs</strong>,
-              paste, click <em>Add photos</em>. Done.
+              Click the bookmark. A new tab opens to Overlay Studio with
+              the photos already importing. No pasting, no clipboard.
             </li>
           </ol>
           <p className="rounded bg-gray-50 p-2 text-[11px] leading-relaxed text-gray-600">

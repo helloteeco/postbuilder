@@ -1,18 +1,22 @@
 // One-click bookmarklet for grabbing Airbnb listing photos from the
-// LIVE DOM in the user's own browser tab. Bypasses every server-side
-// scraping problem because by the time the user clicks it, Airbnb's
-// own JS has already rendered the full gallery.
+// LIVE DOM in the user's own browser tab. Replaces the older clipboard
+// flow — too many sites silently block navigator.clipboard.writeText
+// from bookmarklets — with a URL-hash hand-off:
 //
-// Setup (once):  Drag the rendered <a> button to the bookmarks bar.
-// Use (forever): Open any Airbnb listing tab -> click the bookmark
-//                -> N photo URLs auto-copied to clipboard -> come
-//                back to Overlay Studio -> paste -> done.
+//   bookmarklet scrapes muscache URLs out of the DOM
+//   → window.open('<our app>/overlay-studio#airbnbphotos=...')
+//   → Overlay Studio reads location.hash on mount and auto-imports
 //
-// We keep the IIFE small so the resulting javascript: URL fits well
-// inside browser bookmark length limits (~64KB in Chrome / Firefox,
-// historically much smaller in Safari; this comes in well under 2KB).
+// Net UX: drag bookmark to bookmarks bar once (setup), then on any
+// Airbnb listing it's ONE click — bookmark → new tab appears with the
+// photos already importing. No clipboard, no pasting, no manual step.
+//
+// The target origin (preview / production URL) is baked into the
+// bookmarklet at the moment the user drags it from the page, so
+// re-install if you switch environments.
 
-const BOOKMARKLET_SOURCE = `(function(){
+const SOURCE_TEMPLATE = `(function(){
+  var TARGET = '__TARGET__';
   var urls = new Set();
   var add = function(u){
     if (!u || typeof u !== 'string') return;
@@ -30,31 +34,43 @@ const BOOKMARKLET_SOURCE = `(function(){
     var ss = s.srcset || '';
     ss.split(',').forEach(function(p){ add((p||'').trim().split(' ')[0]); });
   });
-  // Also walk inline JSON blobs (Apollo state) just in case the user
-  // clicked before scrolling through the photo viewer.
   var scripts = document.querySelectorAll('script');
   var re = /https?:\\/\\/a0\\.muscache\\.com\\/im\\/pictures\\/[^\\"'\\s)<>]+\\.(?:jpe?g|png|webp)(?:\\?[^\\"'\\s)<>]*)?/gi;
   for (var i = 0; i < scripts.length; i++) {
     var m = (scripts[i].textContent || '').match(re);
     if (m) m.forEach(add);
   }
+  if (urls.size === 0) {
+    alert('No Airbnb photos found on this page yet. Open Show all photos and wait for the gallery to load, then click the bookmark again.');
+    return;
+  }
   var text = Array.from(urls).join('\\n');
-  if (!text) { alert('No Airbnb photos found on this page. Make sure you opened the listing and clicked Show all photos.'); return; }
-  navigator.clipboard.writeText(text).then(function(){
-    alert('✓ Copied ' + urls.size + ' photo URLs.\\\\nGo to Overlay Studio, switch to Paste image URLs, and paste.');
-  }, function(){
-    var ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.left = '0';
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); alert('✓ Copied ' + urls.size + ' photo URLs.\\\\nPaste into Overlay Studio.'); }
-    catch(e){ alert(text); }
-    document.body.removeChild(ta);
-  });
+  var url = TARGET + '/overlay-studio#airbnbphotos=' + encodeURIComponent(text);
+  var w = window.open(url, '_blank');
+  if (!w || w.closed) {
+    // Popup blocked — fall back to navigating the current tab. User
+    // can come back to the listing later from history.
+    window.location.href = url;
+  }
 })();`;
 
-// Collapse whitespace + wrap as javascript: URL. URI-encode so any
-// stray ` or % survives the drag-to-bookmark serialization.
-export function buildBookmarkletUrl(): string {
-  const compact = BOOKMARKLET_SOURCE.replace(/\s+/g, " ").trim();
+export function buildBookmarkletUrl(targetOrigin: string): string {
+  const source = SOURCE_TEMPLATE.replace(/__TARGET__/g, targetOrigin);
+  const compact = source.replace(/\s+/g, " ").trim();
   return `javascript:${encodeURIComponent(compact)}`;
+}
+
+// Parse a window.location.hash of the form '#airbnbphotos=<urlenc>'
+// and return the photo URLs. Returns [] for any other hash shape.
+export function readAirbnbPhotosFromHash(hash: string): string[] {
+  const m = /^#airbnbphotos=(.+)$/.exec(hash);
+  if (!m) return [];
+  try {
+    return decodeURIComponent(m[1])
+      .split(/\n+/)
+      .map((s) => s.trim())
+      .filter((s) => /^https?:\/\//i.test(s));
+  } catch {
+    return [];
+  }
 }
