@@ -76,12 +76,21 @@ export function loadHistory(): SavedPost[] {
   }
 }
 
-export function saveHistory(history: SavedPost[]): void {
+// Internal — callers go through push/update/promote/delete.
+function saveHistory(history: SavedPost[]): void {
   if (!isBrowser()) return;
+  const trimmed = history.slice(0, HISTORY_LIMIT);
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(history.slice(0, HISTORY_LIMIT)));
+    localStorage.setItem(LS_KEY, JSON.stringify(trimmed));
+    return;
   } catch {
-    // ignore quota
+    // Cover photos can push a 2-entry history past quota. Better to
+    // drop the older entry than silently lose the current one.
+  }
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(trimmed.slice(0, 1)));
+  } catch {
+    // Even one entry won't fit — give up; in-memory state still works.
   }
 }
 
@@ -148,15 +157,4 @@ export function entryLabel(entry: SavedPost): string {
   return entry.caption.slice(0, 60) || "(untitled)";
 }
 
-export function relativeTime(ts: number): string {
-  const ms = Date.now() - ts;
-  const sec = Math.round(ms / 1000);
-  if (sec < 60) return "just now";
-  const min = Math.round(sec / 60);
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const d = Math.round(hr / 24);
-  if (d < 7) return `${d}d ago`;
-  return new Date(ts).toLocaleDateString();
-}
+export { relativeTime } from "@/lib/shared-utils";

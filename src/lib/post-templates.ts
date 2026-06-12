@@ -45,6 +45,14 @@ export interface SlideStyleFields {
   // Body text color is auto-computed from bg luminance for legibility.
   customBg?: string;
   customAccent?: string;
+  // Optional full-bleed personal photo behind the slide (used on the
+  // cover). Stored as a downscaled (~1080w) enhanced JPEG data URL so
+  // history snapshots stay inside localStorage quota. When set, the
+  // photo renders under a gradient scrim and overrides bg.
+  photoDataUrl?: string;
+  // Text color over the photo — auto-picked from the photo's luminance
+  // when attached, user-flippable in the editor.
+  photoTextColor?: "light" | "dark";
 }
 
 export interface HookOpenerSlide extends SlideStyleFields {

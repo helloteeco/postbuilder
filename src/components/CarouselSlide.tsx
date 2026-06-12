@@ -88,6 +88,37 @@ function coverPalette(
   }
 }
 
+// Palette for photo-backed covers. The scrim is a vertical gradient,
+// heavier at top (headline) and bottom (profile row) so text pops while
+// the middle of the photo stays visible. Light text gets a warm yellow
+// accent; dark text (over bright photos) gets terracotta.
+function photoPalette(textColor: "light" | "dark" | undefined): {
+  fg: string;
+  muted: string;
+  accent: string;
+  scrim: string;
+  textShadow: string;
+} {
+  if (textColor === "dark") {
+    return {
+      fg: "#0F1419",
+      muted: "#374151",
+      accent: "#B8501F",
+      scrim:
+        "linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.38) 48%, rgba(255,255,255,0.82) 100%)",
+      textShadow: "0 2px 18px rgba(255,255,255,0.6)",
+    };
+  }
+  return {
+    fg: "#FFFFFF",
+    muted: "#E5E7EB",
+    accent: "#F5C84C",
+    scrim:
+      "linear-gradient(180deg, rgba(0,0,0,0.58) 0%, rgba(0,0,0,0.20) 48%, rgba(0,0,0,0.66) 100%)",
+    textShadow: "0 2px 24px rgba(0,0,0,0.55)",
+  };
+}
+
 const FONT_SANS =
   "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 const FONT_SERIF =
@@ -445,38 +476,76 @@ const PlainTextBody = ({
 
 export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
   function CarouselSlide({ slide, profile, warnOverflow }, ref) {
-    // Cover layout: big hook at top, compact profile at bottom, bg color.
+    // Cover layout: big hook at top, compact profile at bottom. Either a
+    // bg color OR a full-bleed personal photo under a gradient scrim.
     if (slide.type === "hook-opener") {
-      const palette = coverPalette(
+      const hasPhoto = !!slide.photoDataUrl;
+      const photoPal = hasPhoto ? photoPalette(slide.photoTextColor) : null;
+      const colorPal = coverPalette(
         slide.bg ?? "white",
         slide.customBg,
         slide.customAccent,
       );
+      const fg = photoPal?.fg ?? colorPal.fg;
+      const muted = photoPal?.muted ?? colorPal.muted;
+      const accent = photoPal?.accent ?? colorPal.accent;
       return (
         <div
           ref={ref}
           style={{
             width: SLIDE_WIDTH,
             height: SLIDE_HEIGHT,
-            background: palette.bg,
+            background: hasPhoto ? "#0F1419" : colorPal.bg,
             padding: "240px 80px 380px",
             boxSizing: "border-box",
             fontFamily: fontFamilyFor(profile),
-            color: palette.fg,
+            color: fg,
             textAlign: "left",
             overflowWrap: "break-word",
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
             overflow: "hidden",
+            position: "relative",
             outline: warnOverflow ? "4px solid #F59E0B" : "none",
             outlineOffset: -4,
           }}
         >
+          {hasPhoto && (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={slide.photoDataUrl}
+                alt=""
+                crossOrigin="anonymous"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: photoPal!.scrim,
+                }}
+              />
+            </>
+          )}
           {/* Hook+subtitle hard-capped so they never approach the profile.
               Inner height: 1350 - 240 - 380 = 730. Profile ~140. Reserved
               gap ≥ 80. Max hook block = 730 - 140 - 80 = 510. */}
-          <div style={{ maxHeight: 510, overflow: "hidden" }}>
+          <div
+            style={{
+              maxHeight: 510,
+              overflow: "hidden",
+              position: "relative",
+              textShadow: photoPal?.textShadow,
+            }}
+          >
             <div
               style={{
                 fontSize: 132,
@@ -485,7 +554,7 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
                 letterSpacing: "-0.025em",
               }}
             >
-              {renderInline(slide.headline, palette.accent)}
+              {renderInline(slide.headline, accent)}
             </div>
             {slide.subtitle && (
               <div
@@ -493,18 +562,22 @@ export const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
                   marginTop: 28,
                   fontSize: 48,
                   lineHeight: 1.3,
-                  color: palette.muted,
+                  color: muted,
                 }}
               >
-                {renderInline(slide.subtitle, palette.accent)}
+                {renderInline(slide.subtitle, accent)}
               </div>
             )}
           </div>
-          <ProfileRowCompact
-            profile={profile}
-            color={palette.fg}
-            mutedColor={palette.muted}
-          />
+          <div
+            style={{ position: "relative", textShadow: photoPal?.textShadow }}
+          >
+            <ProfileRowCompact
+              profile={profile}
+              color={fg}
+              mutedColor={muted}
+            />
+          </div>
         </div>
       );
     }

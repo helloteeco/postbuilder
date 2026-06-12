@@ -19,6 +19,7 @@ import {
 import { scorePhoto } from "@/app/overlay-studio/lib/photoScoring";
 import { enhancePhoto } from "@/app/overlay-studio/lib/photoEnhance";
 import { pickTip } from "@/app/overlay-studio/lib/designTips";
+import { readFileAsDataUrl } from "@/lib/shared-utils";
 import {
   OUTPUT_DIMENSIONS,
   type OutputFormat,
@@ -257,13 +258,7 @@ async function downloadAll(
       if (!r.ok) continue;
       const blob = await r.blob();
       if (!blob.type.startsWith("image/")) continue;
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(fr.result as string);
-        fr.onerror = reject;
-        fr.readAsDataURL(blob);
-      });
-      out.push({ url: limited[i], dataUrl });
+      out.push({ url: limited[i], dataUrl: await readFileAsDataUrl(blob) });
     } catch {
       // skip and continue
     }

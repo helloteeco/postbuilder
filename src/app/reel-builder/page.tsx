@@ -22,6 +22,7 @@ import {
   addPendingDraft,
   cleanTitle,
 } from "@/app/coach/lib/pendingDraft";
+import { ensureChannelsInitialized } from "@/app/coach/lib/channels";
 import ReelInputForm from "./components/ReelInputForm";
 import ReelHookPreview from "./components/ReelHookPreview";
 import ReelCaptionPreview from "./components/ReelCaptionPreview";
@@ -101,6 +102,10 @@ export default function ReelBuilderPage() {
   favExportRefs.current = favorites.map((_, i) => favExportRefs.current[i] ?? null);
 
   useEffect(() => {
+    // Run the channel-system migration even when the user lands here
+    // first — keeps the send-to-tracker handoff consistent with Coach
+    // Mode regardless of which tab booted the app.
+    ensureChannelsInitialized();
     setFavorites(loadFavorites());
     setHistory(loadReelHistory());
   }, []);

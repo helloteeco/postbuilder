@@ -1,6 +1,7 @@
 "use client";
 
 import type { CoverBg, Slide } from "@/lib/post-templates";
+import CoverPhotoPicker from "@/components/post-builder/CoverPhotoPicker";
 
 interface Props {
   slide: Slide;
@@ -117,6 +118,17 @@ export default function SlideEditor({
             value={slide.subtitle ?? ""}
             onChange={(v) => patch({ subtitle: v })}
           />
+          <CoverPhotoPicker
+            photoDataUrl={slide.photoDataUrl}
+            photoTextColor={slide.photoTextColor}
+            onApply={(dataUrl, textColor) =>
+              patch({ photoDataUrl: dataUrl, photoTextColor: textColor })
+            }
+            onFlipTextColor={(next) => patch({ photoTextColor: next })}
+            onRemove={() =>
+              patch({ photoDataUrl: undefined, photoTextColor: undefined })
+            }
+          />
         </>
       )}
 
@@ -210,7 +222,14 @@ export default function SlideEditor({
       )}
 
       {/* Background picker — applies to every slide type so the user can
-          theme the whole carousel, not just the cover. */}
+          theme the whole carousel, not just the cover. Hidden while a
+          cover photo is set (the photo + scrim replace the bg color). */}
+      {slide.type === "hook-opener" && slide.photoDataUrl ? (
+        <div className="border-t border-gray-100 pt-3 text-[11px] text-gray-500">
+          Background colors are hidden while a cover photo is set — remove
+          the photo to use a color background instead.
+        </div>
+      ) : (
       <div className="border-t border-gray-100 pt-3">
         <div className="mb-1.5 text-xs text-gray-600">
           Background &amp; accent color
@@ -302,6 +321,7 @@ export default function SlideEditor({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

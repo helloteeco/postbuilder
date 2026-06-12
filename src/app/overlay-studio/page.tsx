@@ -47,6 +47,7 @@ import OverlayCaptionPanel, {
   composeWarmDesignCaption,
 } from "./components/OverlayCaptionPanel";
 import OverlayExportBar from "./components/OverlayExportBar";
+import OverlaySendToTracker from "./components/OverlaySendToTracker";
 import RecentOverlays from "./components/RecentOverlays";
 
 // Loaded for canvas-accurate export (preview + zip share the same DOM).
@@ -220,14 +221,20 @@ export default function OverlayStudioPage() {
             carousel or reel cover. Works for both formats.
           </p>
         </div>
-        <OverlayExportBar
-          format={settings.outputFormat}
-          slideCount={media.length}
-          getSlideNodes={() => exportRefs.current}
-          caption={caption}
-          firstComment={firstComment}
-          listingNickname={settings.listingNickname}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <OverlaySendToTracker
+            media={media}
+            listingNickname={settings.listingNickname}
+          />
+          <OverlayExportBar
+            format={settings.outputFormat}
+            slideCount={media.length}
+            getSlideNodes={() => exportRefs.current}
+            caption={caption}
+            firstComment={firstComment}
+            listingNickname={settings.listingNickname}
+          />
+        </div>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">

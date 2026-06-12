@@ -11,6 +11,7 @@ import {
   defaultPositionForBand,
 } from "@/app/overlay-studio/lib/overlayAnalysis";
 import { enhancePhoto } from "@/app/overlay-studio/lib/photoEnhance";
+import { readFileAsDataUrl } from "@/lib/shared-utils";
 import { pickTip } from "@/app/overlay-studio/lib/designTips";
 import type {
   OverlayMedia,
@@ -36,7 +37,7 @@ export default function OverlayUpload({ media, settings, onSet }: Props) {
     const fresh: OverlayMedia[] = [];
     for (let i = 0; i < arr.length; i++) {
       const file = arr[i];
-      const raw = await readAsDataUrl(file);
+      const raw = await readFileAsDataUrl(file);
       const dataUrl = settings.enhancePhotos ? await enhancePhoto(raw) : raw;
       const auto = await analyzeImage(dataUrl);
       const recipe = carouselRecipe(startingCount + arr.length);
@@ -105,11 +106,3 @@ export default function OverlayUpload({ media, settings, onSet }: Props) {
   );
 }
 
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-}

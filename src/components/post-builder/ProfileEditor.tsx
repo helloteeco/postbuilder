@@ -11,6 +11,7 @@ import {
   type ProfileFont,
   type SavedProfile,
 } from "@/lib/post-templates";
+import { readFileAsDataUrl } from "@/lib/shared-utils";
 
 interface Props {
   profile: PostBuilderProfile;
@@ -67,15 +68,13 @@ export default function ProfileEditor({ profile, onChange }: Props) {
 
   async function onFile(file: File) {
     setLoading(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        update({ avatarDataUrl: reader.result });
-      }
+    try {
+      update({ avatarDataUrl: await readFileAsDataUrl(file) });
+    } catch {
+      // unreadable file — leave avatar unchanged
+    } finally {
       setLoading(false);
-    };
-    reader.onerror = () => setLoading(false);
-    reader.readAsDataURL(file);
+    }
   }
 
   function saveCurrent() {

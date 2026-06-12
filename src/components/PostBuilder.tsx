@@ -32,6 +32,8 @@ import CaptionPanel from "@/components/post-builder/CaptionPanel";
 import ExportBar from "@/components/post-builder/ExportBar";
 import SendToTrackerButton from "@/components/post-builder/SendToTrackerButton";
 import WelcomeBanner from "@/components/WelcomeBanner";
+import { ensureChannelsInitialized } from "@/app/coach/lib/channels";
+import { readFileAsDataUrl } from "@/lib/shared-utils";
 
 interface AnalyzeOk {
   ok: true;
@@ -115,8 +117,12 @@ export default function PostBuilder() {
   const exportRefs = useRef<(HTMLDivElement | null)[]>([]);
   exportRefs.current = slides.map((_, i) => exportRefs.current[i] ?? null);
 
-  // Load history on mount.
+  // Load history on mount. Also run the channel-system migration so a
+  // user who opens Post Builder FIRST (before ever visiting Coach Mode)
+  // still gets legacy coach data migrated before any handoff — the
+  // "Send to tracker" queue lands in a consistent world either way.
   useEffect(() => {
+    ensureChannelsInitialized();
     setHistory(loadHistory());
   }, []);
 
@@ -247,6 +253,20 @@ export default function PostBuilder() {
         return;
       }
       const post = attachIds(data.post);
+      // Keep the user's cover photo across regenerations — re-uploading
+      // it every time Claude rewrites the text would be busywork.
+      const prevCover = slides[0];
+      if (
+        prevCover?.type === "hook-opener" &&
+        prevCover.photoDataUrl &&
+        post.slides[0]?.type === "hook-opener"
+      ) {
+        post.slides[0] = {
+          ...post.slides[0],
+          photoDataUrl: prevCover.photoDataUrl,
+          photoTextColor: prevCover.photoTextColor,
+        };
+      }
       setSlides(post.slides);
       setCaption(post.caption);
       setHooks(post.hooks);
@@ -295,13 +315,7 @@ export default function PostBuilder() {
             `/api/proxy-image?url=${encodeURIComponent(igUrl)}`,
           );
           const blob = await r.blob();
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const fr = new FileReader();
-            fr.onload = () => resolve(fr.result as string);
-            fr.onerror = reject;
-            fr.readAsDataURL(blob);
-          });
-          images.push(dataUrl);
+          images.push(await readFileAsDataUrl(blob));
         } catch {
           // skip
         }

@@ -14,6 +14,7 @@
 // fetch populates both.
 
 import { useMemo, useState } from "react";
+import { readFileAsDataUrl } from "@/lib/shared-utils";
 
 export interface InputState {
   topic: string;
@@ -67,17 +68,7 @@ export default function InputPanel({
 
   async function addFiles(files: FileList | File[]) {
     const arr = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    const dataUrls = await Promise.all(
-      arr.map(
-        (f) =>
-          new Promise<string>((resolve, reject) => {
-            const r = new FileReader();
-            r.onload = () => resolve(r.result as string);
-            r.onerror = reject;
-            r.readAsDataURL(f);
-          }),
-      ),
-    );
+    const dataUrls = await Promise.all(arr.map(readFileAsDataUrl));
     onChange({ ...value, images: [...value.images, ...dataUrls] });
   }
 

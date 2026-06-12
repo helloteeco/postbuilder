@@ -23,6 +23,7 @@ import {
   slidesFromPostBuilder,
 } from "@/app/coach/lib/contentAnalysis";
 import { loadHistory, type SavedPost } from "@/lib/post-history";
+import { readFileAsDataUrl } from "@/lib/shared-utils";
 
 interface Props {
   open: boolean;
@@ -118,15 +119,7 @@ export default function SlideCaptureModal({
     if (arr.length === 0) return;
     try {
       const compressed = await Promise.all(
-        arr.map(async (f) => {
-          const reader = new FileReader();
-          const dataUrl = await new Promise<string>((res, rej) => {
-            reader.onload = () => res(reader.result as string);
-            reader.onerror = () => rej(new Error("Could not read file"));
-            reader.readAsDataURL(f);
-          });
-          return compressImageDataUrl(dataUrl);
-        }),
+        arr.map(async (f) => compressImageDataUrl(await readFileAsDataUrl(f))),
       );
       setUploadedImages((prev) => [...prev, ...compressed]);
     } catch (e) {
