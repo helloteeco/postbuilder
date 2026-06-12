@@ -87,25 +87,17 @@ export default function OverlayUrlImport({
       });
       const data = (await resp.json()) as FetchResp;
       if (!data.ok) {
-        setStatus(
-          `${data.code}: ${data.message}\n\nFallback: switch to “Paste image URLs” above — right-click each photo on the Airbnb tab → Copy image address → paste here.`,
-        );
+        setStatus(data.message);
         return;
       }
       const candidates = data.result.urls;
       if (candidates.length === 0) {
-        setStatus("No photos found. Try the “Paste image URLs” mode instead.");
+        setStatus("No photos found on that listing.");
         return;
       }
-      if (candidates.length < 5) {
-        setStatus(
-          `Airbnb only handed us ${candidates.length} photo${candidates.length === 1 ? "" : "s"} (they hide the rest behind JavaScript). To pull the full gallery, switch to “Paste image URLs” above. Importing what we got…`,
-        );
-      } else {
-        setStatus(
-          `Found ${candidates.length} photo${candidates.length === 1 ? "" : "s"}. Downloading…`,
-        );
-      }
+      setStatus(
+        `Found ${candidates.length} photo${candidates.length === 1 ? "" : "s"}. Downloading…`,
+      );
       await downloadScoreAndPush(candidates);
       setUrl("");
     } catch (err) {
@@ -250,9 +242,9 @@ export default function OverlayUrlImport({
       {mode === "url" ? (
         <>
           <p className="mb-2 text-[11px] text-gray-600">
-            Paste the <code>/rooms/</code> URL. We try Airbnb&apos;s own API
-            first, but they sometimes block our server &mdash; if it returns
-            only 1 photo, switch to <strong>Paste image URLs</strong>.
+            Paste the <code>/rooms/</code> URL. We race Airbnb&apos;s API
+            and a few render-the-page services in parallel, then merge
+            whatever they all returned. No setup needed.
           </p>
           <input
             type="url"

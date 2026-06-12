@@ -3,24 +3,33 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-// Pulls photos from a pasted Airbnb LISTING URL only. The earlier
-// "any page works" mode kept dragging in host avatars, AirCover
-// graphics, and amenity icons, so this version is intentionally
-// strict:
+// Pulls photos from a pasted Airbnb LISTING URL. Lots of strategies
+// raced in parallel so the user never has to set up an API key OR
+// hand-paste image URLs as a fallback:
 //
-//   1. Hostname must be airbnb.*  (404 anything else).
-//   2. Path must look like a real listing (/rooms/<id>, /h/<slug>,
-//      /luxury/listing/<id>) — bail on search / wishlist / experience
-//      pages.
-//   3. Photos come from two listing-specific sources only:
-//        - The JSON-LD <script type="application/ld+json"> block.
-//          Schema.org Product / LodgingBusiness has an `image` array
-//          that is exactly the listing's "Show all photos" gallery.
-//        - The hosting-photo URL pattern on Airbnb's CDN — paths that
-//          contain /im/pictures/miso/Hosting-, /im/pictures/hosting/,
-//          or /im/pictures/lombard/ are listing photos. Everything
-//          else on muscache (user/, aircover/, icons/, badges/, etc.)
-//          is skipped.
+//   1. Airbnb's own v2 REST API hit with their public web API key.
+//      Fast, free, exact gallery — when the IP isn't blocked.
+//   2. Jina Reader (https://r.jina.ai) — public free render-as-a-
+//      service. Runs real headless Chrome, returns rendered HTML so
+//      our extractors see the fully-hydrated gallery. The path that
+//      makes URL mode actually work most of the time.
+//   3. Direct fetch — usually a stripped React shell, but worth a
+//      shot since it's instant when it works.
+//   4. AllOrigins CORS proxy — bypasses IP blocking when relevant.
+//   5. Wayback Machine cached snapshot — uses the Internet Archive's
+//      latest crawl, which captures the fully-rendered page.
+//   6. ScrapingBee — only if SCRAPINGBEE_API_KEY is set; kept as a
+//      backstop, no longer the primary path.
+//
+// All strategy results are merged + deduped, so a partial response
+// from one source plus a partial from another adds up. Photos go
+// through the same listing-only filter (Hosting-/lombard/ paths) to
+// keep host avatars, AirCover graphics, and icons out.
+//
+// URL validation:
+//   - Hostname must be airbnb.*  (rejects anything else upfront).
+//   - Path must look like a real listing (/rooms/<id>, /h/<slug>,
+//     /luxury/listing/<id>).
 
 interface FetchResult {
   source: "airbnb";
@@ -204,10 +213,6 @@ function variantScore(u: string): number {
 // Stable for years; rotates only when they do a major API revamp.
 const AIRBNB_PUBLIC_API_KEY = "d306zoyjsyarp7ifhu67rjxn52tv0t20";
 
-function hasScrapingBee(): boolean {
-  return !!process.env.SCRAPINGBEE_API_KEY;
-}
-
 // Strategy 1 — Airbnb's own v2 REST endpoint, free.
 //
 // GET https://www.airbnb.com/api/v2/pdp_listing_details/<id>
@@ -277,36 +282,49 @@ function extractPhotosFromV2Response(data: unknown): string[] {
   return out;
 }
 
-async function fetchAirbnbHtml(url: string): Promise<string | null> {
-  const key = process.env.SCRAPINGBEE_API_KEY;
-  if (key) {
-    // render_js=true tells ScrapingBee to spin up real Chrome so the
-    // Apollo cache fully hydrates. premium_proxy=true rotates through
-    // residential IPs so Airbnb doesn't 403 us. country_code=us keeps
-    // listings/pricing in the locale the user expects.
-    const target = `https://app.scrapingbee.com/api/v1/?api_key=${encodeURIComponent(
-      key,
-    )}&url=${encodeURIComponent(url)}&render_js=true&premium_proxy=true&country_code=us&wait=2000`;
-    try {
-      const resp = await fetch(target, {
-        signal: AbortSignal.timeout(28_000),
-      });
-      if (!resp.ok) return null;
-      return await resp.text();
-    } catch {
-      return null;
-    }
-  }
-  // No proxy configured — best-effort direct fetch.
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+// Direct fetch. Often gets a stripped SPA shell from Vercel's IPs
+// because Airbnb anti-bots cloud egress, but it's free and instant
+// when it works.
+async function fetchDirect(url: string): Promise<string | null> {
   try {
     const resp = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
+      headers: BROWSER_HEADERS,
       redirect: "follow",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  }
+}
+
+// Jina Reader — public render-as-a-service that runs real headless
+// Chrome on their backend, waits for hydration, and returns the
+// rendered HTML. Free, no API key required, no env var to set.
+// This is the path that turns the user's pasted listing URL into the
+// fully-loaded gallery — same effect ScrapingBee gives us but with
+// zero setup. Rate-limited (~50 req/min on the free tier) which is
+// generous for the user's volume.
+async function fetchViaJinaReader(url: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`https://r.jina.ai/${url}`, {
+      headers: {
+        ...BROWSER_HEADERS,
+        // Ask Jina to return raw HTML (not their default markdown
+        // extraction) so our existing regex extractors fire on the
+        // same shape they fire on for direct fetches.
+        "X-Return-Format": "html",
+        // Bypass Jina's own cache — listings change.
+        "X-No-Cache": "true",
+      },
       signal: AbortSignal.timeout(15_000),
     });
     if (!resp.ok) return null;
@@ -314,6 +332,96 @@ async function fetchAirbnbHtml(url: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+// Public CORS proxy. AllOrigins fetches the URL server-side and
+// returns the raw response. Doesn't render JS, so it only helps when
+// the issue is IP-blocking (not SPA shells) — kept as a cheap belt-
+// and-suspenders pass.
+async function fetchViaAllOrigins(url: string): Promise<string | null> {
+  try {
+    const resp = await fetch(
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      { signal: AbortSignal.timeout(12_000) },
+    );
+    if (!resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  }
+}
+
+// Wayback Machine — fetch the most recent archived snapshot of the
+// listing page. The Internet Archive captures Airbnb listings
+// regularly; cached snapshots include the fully-rendered HTML
+// because Wayback uses a real browser to crawl.
+async function fetchViaWayback(url: string): Promise<string | null> {
+  try {
+    const lookup = await fetch(
+      `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`,
+      { signal: AbortSignal.timeout(8_000) },
+    );
+    if (!lookup.ok) return null;
+    const data = (await lookup.json()) as {
+      archived_snapshots?: { closest?: { url?: string; available?: boolean } };
+    };
+    const snap = data.archived_snapshots?.closest;
+    if (!snap?.url || !snap.available) return null;
+    const html = await fetch(snap.url, {
+      headers: BROWSER_HEADERS,
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!html.ok) return null;
+    return await html.text();
+  } catch {
+    return null;
+  }
+}
+
+// Optional ScrapingBee path if the user did set the key — kept as a
+// final fallback because it's the most reliable when configured.
+async function fetchViaScrapingBee(url: string): Promise<string | null> {
+  const key = process.env.SCRAPINGBEE_API_KEY;
+  if (!key) return null;
+  const target = `https://app.scrapingbee.com/api/v1/?api_key=${encodeURIComponent(
+    key,
+  )}&url=${encodeURIComponent(url)}&render_js=true&premium_proxy=true&country_code=us&wait=2000`;
+  try {
+    const resp = await fetch(target, { signal: AbortSignal.timeout(28_000) });
+    if (!resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  }
+}
+
+// Run a list of HTML-fetching strategies in parallel, return the
+// merged list of photo URLs every strategy contributed. Each strategy
+// gets its own timeout so a slow one doesn't sink the whole request.
+async function gatherPhotosFromHtmlStrategies(
+  cleanListing: string,
+  photosUrl: string,
+): Promise<string[]> {
+  const strategies: Array<() => Promise<string | null>> = [
+    () => fetchViaJinaReader(photosUrl),
+    () => fetchViaJinaReader(cleanListing),
+    () => fetchDirect(photosUrl),
+    () => fetchDirect(cleanListing),
+    () => fetchViaAllOrigins(photosUrl),
+    () => fetchViaAllOrigins(cleanListing),
+    () => fetchViaWayback(cleanListing),
+    () => fetchViaScrapingBee(cleanListing),
+  ];
+  const settled = await Promise.allSettled(strategies.map((s) => s()));
+  const out: string[] = [];
+  for (const r of settled) {
+    if (r.status !== "fulfilled" || !r.value) continue;
+    const html = r.value;
+    out.push(...extractFromJsonLd(html));
+    out.push(...extractUrlsFromJsonBlob(html));
+    out.push(...(html.match(HOSTING_PHOTO_RE) ?? []));
+  }
+  return out;
 }
 
 function classifyAirbnbUrl(parsed: URL): { ok: true; id: string } | { ok: false; reason: string } {
@@ -385,65 +493,29 @@ export async function POST(req: Request) {
   const cleanListing = `${parsed.origin}${cleanPath}`;
   const photosUrl = `${cleanListing}/photos`;
 
-  // Strategy 1 — Airbnb's own JSON API. Free, fast, returns the full
-  // gallery directly when it works.
-  const apiHits = (await tryAirbnbApi(classified.id)) ?? [];
-
-  // Strategy 2 + 3 — fetch the HTML pages and grep for photos. Only
-  // pay this cost if the API didn't already give us a complete result
-  // (it usually does on numeric listing ids, but slug-based URLs or
-  // newer listings sometimes fall through).
-  const needsHtml = apiHits.filter((u) => isHostingPhoto(u)).length < 10;
-  const [roomsHtml, photosHtml] = needsHtml
-    ? await Promise.all([
-        fetchAirbnbHtml(cleanListing),
-        fetchAirbnbHtml(photosUrl),
-      ])
-    : [null, null];
-
-  if (apiHits.length === 0 && !roomsHtml && !photosHtml) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "FETCH_FAILED",
-        message:
-          "Couldn't reach Airbnb. The listing may be private, regionally blocked, or rate-limited.",
-      },
-      { status: 502 },
-    );
-  }
-
-  const jsonLdHits = [
-    ...extractFromJsonLd(roomsHtml ?? ""),
-    ...extractFromJsonLd(photosHtml ?? ""),
-  ];
-  const blobHits = [
-    ...extractUrlsFromJsonBlob(roomsHtml ?? ""),
-    ...extractUrlsFromJsonBlob(photosHtml ?? ""),
-  ];
-  const rawHits = [
-    ...((roomsHtml ?? "").match(HOSTING_PHOTO_RE) ?? []),
-    ...((photosHtml ?? "").match(HOSTING_PHOTO_RE) ?? []),
-  ];
-
-  const combined = dedupeAndPickLargest([
-    ...apiHits,
-    ...jsonLdHits,
-    ...blobHits,
-    ...rawHits,
+  // Two strategy groups, run in parallel so the worst-case latency is
+  // the slowest single strategy not the sum.
+  //   Group A: Airbnb's own v2 JSON API. Free, fast, works for most
+  //            numeric-id listings.
+  //   Group B: Render-the-page strategies — Jina Reader (free headless
+  //            Chrome), direct fetch, public CORS proxies, Wayback
+  //            cached snapshot, optional ScrapingBee. Whichever ones
+  //            succeed contribute photo URLs; we merge them all.
+  const [apiHits, htmlHits] = await Promise.all([
+    tryAirbnbApi(classified.id).then((r) => r ?? []),
+    gatherPhotosFromHtmlStrategies(cleanListing, photosUrl),
   ]);
 
-  const setupNeeded = !hasScrapingBee();
+  const combined = dedupeAndPickLargest([...apiHits, ...htmlHits]);
 
   if (combined.length === 0) {
     return NextResponse.json(
       {
         ok: false,
-        code: setupNeeded ? "SETUP_NEEDED" : "NO_PHOTOS",
-        message: setupNeeded
-          ? "Airbnb served a stripped page (their gallery is rendered by JavaScript). Set SCRAPINGBEE_API_KEY in Vercel env vars to import the full gallery — free tier covers ~40 listings/month."
-          : "Couldn't find listing photos. The listing may be private, regionally blocked, or in a layout we don't recognize yet.",
-        setupNeeded,
+        code: "NO_PHOTOS",
+        message:
+          "Couldn't find listing photos. The listing may be private or geo-restricted. As a backup, switch to 'Paste image URLs' above.",
+        setupNeeded: false,
       },
       { status: 422 },
     );
@@ -456,7 +528,7 @@ export async function POST(req: Request) {
       host: parsed.hostname,
       listingId: classified.id,
       urls: combined,
-      setupNeeded,
+      setupNeeded: false,
     } satisfies FetchResult,
   });
 }
