@@ -25,32 +25,57 @@ const SOURCE_TEMPLATE = `(function(){
     if (!/\\/im\\/pictures\\/(miso\\/Hosting-\\d+|hosting\\/|lombard\\/|prohost-api\\/Hosting-\\d+)/i.test(u)) return;
     urls.add(u.replace(/im_w=\\d+/, 'im_w=1200'));
   };
-  document.querySelectorAll('img').forEach(function(img){
-    add(img.src); add(img.currentSrc);
-    var ss = img.srcset || '';
-    ss.split(',').forEach(function(p){ add((p||'').trim().split(' ')[0]); });
-  });
-  document.querySelectorAll('source').forEach(function(s){
-    var ss = s.srcset || '';
-    ss.split(',').forEach(function(p){ add((p||'').trim().split(' ')[0]); });
-  });
-  var scripts = document.querySelectorAll('script');
-  var re = /https?:\\/\\/a0\\.muscache\\.com\\/im\\/pictures\\/[^\\"'\\s)<>]+\\.(?:jpe?g|png|webp)(?:\\?[^\\"'\\s)<>]*)?/gi;
-  for (var i = 0; i < scripts.length; i++) {
-    var m = (scripts[i].textContent || '').match(re);
-    if (m) m.forEach(add);
+  try {
+    document.querySelectorAll('img').forEach(function(img){
+      add(img.src); add(img.currentSrc);
+      var ss = img.srcset || '';
+      ss.split(',').forEach(function(p){ add((p||'').trim().split(' ')[0]); });
+    });
+    document.querySelectorAll('source').forEach(function(s){
+      var ss = s.srcset || '';
+      ss.split(',').forEach(function(p){ add((p||'').trim().split(' ')[0]); });
+    });
+    var scripts = document.querySelectorAll('script');
+    var re = /https?:\\/\\/a0\\.muscache\\.com\\/im\\/pictures\\/[^\\"'\\s)<>]+\\.(?:jpe?g|png|webp)(?:\\?[^\\"'\\s)<>]*)?/gi;
+    for (var i = 0; i < scripts.length; i++) {
+      var m = (scripts[i].textContent || '').match(re);
+      if (m) m.forEach(add);
+    }
+  } catch (err) {
+    alert('Overlay Studio bookmarklet hit an error reading the page: ' + (err && err.message ? err.message : err));
+    return;
   }
   if (urls.size === 0) {
-    alert('No Airbnb photos found on this page yet. Open Show all photos and wait for the gallery to load, then click the bookmark again.');
+    alert("Bookmarklet ran but found 0 Airbnb photos on this page.\\n\\nFix: click 'Show all photos' on the listing, wait for the grid to fully load, then click the bookmark again. (If you're not on an Airbnb listing tab, switch to one first.)");
     return;
   }
   var text = Array.from(urls).join('\\n');
   var url = TARGET + '/overlay-studio#airbnbphotos=' + encodeURIComponent(text);
-  var w = window.open(url, '_blank');
-  if (!w || w.closed) {
-    // Popup blocked — fall back to navigating the current tab. User
-    // can come back to the listing later from history.
+  var ok = false;
+  try {
+    var w = window.open(url, '_blank');
+    ok = !!(w && !w.closed);
+  } catch (e) { ok = false; }
+  if (ok) {
+    // Popup opened — done.
+    return;
+  }
+  // Popup blocked. Show a confirm dialog so the user gets a clear
+  // choice between navigating this tab and copying the URL.
+  if (confirm('Found ' + urls.size + ' photos.\\n\\nPopup was blocked by your browser. Click OK to open Overlay Studio in THIS tab, or Cancel to copy the import URL to clipboard.')) {
     window.location.href = url;
+    return;
+  }
+  // Try clipboard. If that also fails, show in prompt so they can
+  // hand-select and copy.
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(function(){
+      alert('Copied the import URL to clipboard. Paste it into a new tab — Overlay Studio will load and auto-import the photos.');
+    }, function(){
+      window.prompt('Copy this URL and paste into a new tab:', url);
+    });
+  } else {
+    window.prompt('Copy this URL and paste into a new tab:', url);
   }
 })();`;
 

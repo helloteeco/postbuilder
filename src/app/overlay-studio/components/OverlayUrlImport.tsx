@@ -302,9 +302,14 @@ export default function OverlayUrlImport({
 
       {mode === "bookmarklet" && (
         <div className="space-y-2">
+          <p className="rounded border border-amber-200 bg-amber-50 p-2 text-[11px] leading-relaxed text-amber-900">
+            <strong>If you already have an &ldquo;⚡ Send to Overlay
+            Studio&rdquo; bookmark from an earlier version, delete it
+            first.</strong> The bookmarklet code has changed; old
+            bookmarks point at outdated logic and won&apos;t work right.
+          </p>
           <p className="text-[11px] leading-relaxed text-gray-600">
-            <strong>One-time setup. Then 2 clicks forever.</strong> Drag
-            this button to your bookmarks bar:
+            <strong>Drag the button below to your bookmarks bar:</strong>
           </p>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a
