@@ -37,6 +37,10 @@ interface FetchResult {
   listingId: string | null;
   urls: string[];
   setupNeeded: boolean;
+  // Per-strategy diagnostics so the UI can show "v2 API got 0,
+  // jina-cf got 28" when something looks off. Helps debug listings
+  // that come back thin without poking server logs.
+  diag: Array<{ name: string; ok: boolean; bytes: number; photos: number }>;
 }
 
 const AIRBNB_HOST_RE = /(^|\.)airbnb\.[a-z.]+$/i;
@@ -306,26 +310,33 @@ async function fetchDirect(url: string): Promise<string | null> {
   }
 }
 
-// Jina Reader — public render-as-a-service that runs real headless
-// Chrome on their backend, waits for hydration, and returns the
-// rendered HTML. Free, no API key required, no env var to set.
-// This is the path that turns the user's pasted listing URL into the
-// fully-loaded gallery — same effect ScrapingBee gives us but with
-// zero setup. Rate-limited (~50 req/min on the free tier) which is
-// generous for the user's volume.
-async function fetchViaJinaReader(url: string): Promise<string | null> {
+// Jina Reader — public render-as-a-service. We hit it twice with
+// different engines because Airbnb's anti-bot detects some of Jina's
+// crawlers:
+//   - default engine: their cheapest renderer, sometimes gets the
+//     same stripped React shell as a direct fetch.
+//   - cf-browser-rendering: backed by Cloudflare's Browser Rendering
+//     workers. Much more aggressive (real browser, residential-ish
+//     egress) and almost always gets the hydrated gallery.
+// Free, no API key required for either.
+async function fetchViaJinaReader(
+  url: string,
+  engine: "default" | "cf-browser-rendering" | "browser" = "default",
+): Promise<string | null> {
   try {
+    const headers: Record<string, string> = {
+      ...BROWSER_HEADERS,
+      // Markdown is Jina's default and turns out to be FINE for us
+      // because the embedded image links use plain muscache.com URLs
+      // that HOSTING_PHOTO_RE picks up just the same as in raw HTML.
+      // We don't force HTML mode anymore — Jina's HTML output sometimes
+      // pre-strips inline script blobs we depend on.
+      "X-No-Cache": "true",
+    };
+    if (engine !== "default") headers["X-Engine"] = engine;
     const resp = await fetch(`https://r.jina.ai/${url}`, {
-      headers: {
-        ...BROWSER_HEADERS,
-        // Ask Jina to return raw HTML (not their default markdown
-        // extraction) so our existing regex extractors fire on the
-        // same shape they fire on for direct fetches.
-        "X-Return-Format": "html",
-        // Bypass Jina's own cache — listings change.
-        "X-No-Cache": "true",
-      },
-      signal: AbortSignal.timeout(15_000),
+      headers,
+      signal: AbortSignal.timeout(20_000),
     });
     if (!resp.ok) return null;
     return await resp.text();
@@ -395,33 +406,58 @@ async function fetchViaScrapingBee(url: string): Promise<string | null> {
   }
 }
 
+interface StrategyReport {
+  name: string;
+  ok: boolean;
+  bytes: number;
+  photos: number;
+}
+
 // Run a list of HTML-fetching strategies in parallel, return the
-// merged list of photo URLs every strategy contributed. Each strategy
-// gets its own timeout so a slow one doesn't sink the whole request.
+// merged list of photo URLs every strategy contributed plus a per-
+// strategy report so we can surface what worked + what didn't in the
+// API response (lets us debug live without poking server logs).
 async function gatherPhotosFromHtmlStrategies(
   cleanListing: string,
   photosUrl: string,
-): Promise<string[]> {
-  const strategies: Array<() => Promise<string | null>> = [
-    () => fetchViaJinaReader(photosUrl),
-    () => fetchViaJinaReader(cleanListing),
-    () => fetchDirect(photosUrl),
-    () => fetchDirect(cleanListing),
-    () => fetchViaAllOrigins(photosUrl),
-    () => fetchViaAllOrigins(cleanListing),
-    () => fetchViaWayback(cleanListing),
-    () => fetchViaScrapingBee(cleanListing),
+): Promise<{ urls: string[]; report: StrategyReport[] }> {
+  const strategies: Array<{ name: string; run: () => Promise<string | null> }> = [
+    { name: "jina-cf:photos", run: () => fetchViaJinaReader(photosUrl, "cf-browser-rendering") },
+    { name: "jina-cf:rooms", run: () => fetchViaJinaReader(cleanListing, "cf-browser-rendering") },
+    { name: "jina-browser:photos", run: () => fetchViaJinaReader(photosUrl, "browser") },
+    { name: "jina-default:rooms", run: () => fetchViaJinaReader(cleanListing) },
+    { name: "direct:photos", run: () => fetchDirect(photosUrl) },
+    { name: "direct:rooms", run: () => fetchDirect(cleanListing) },
+    { name: "allorigins:photos", run: () => fetchViaAllOrigins(photosUrl) },
+    { name: "allorigins:rooms", run: () => fetchViaAllOrigins(cleanListing) },
+    { name: "wayback:rooms", run: () => fetchViaWayback(cleanListing) },
+    { name: "scrapingbee:rooms", run: () => fetchViaScrapingBee(cleanListing) },
   ];
-  const settled = await Promise.allSettled(strategies.map((s) => s()));
+
+  const settled = await Promise.allSettled(strategies.map((s) => s.run()));
   const out: string[] = [];
-  for (const r of settled) {
-    if (r.status !== "fulfilled" || !r.value) continue;
+  const report: StrategyReport[] = [];
+
+  for (let i = 0; i < settled.length; i++) {
+    const r = settled[i];
+    const name = strategies[i].name;
+    if (r.status !== "fulfilled" || !r.value) {
+      report.push({ name, ok: false, bytes: 0, photos: 0 });
+      continue;
+    }
     const html = r.value;
+    const before = out.length;
     out.push(...extractFromJsonLd(html));
     out.push(...extractUrlsFromJsonBlob(html));
     out.push(...(html.match(HOSTING_PHOTO_RE) ?? []));
+    report.push({
+      name,
+      ok: true,
+      bytes: html.length,
+      photos: out.length - before,
+    });
   }
-  return out;
+  return { urls: out, report };
 }
 
 function classifyAirbnbUrl(parsed: URL): { ok: true; id: string } | { ok: false; reason: string } {
@@ -501,21 +537,37 @@ export async function POST(req: Request) {
   //            Chrome), direct fetch, public CORS proxies, Wayback
   //            cached snapshot, optional ScrapingBee. Whichever ones
   //            succeed contribute photo URLs; we merge them all.
-  const [apiHits, htmlHits] = await Promise.all([
+  const [apiHits, htmlGroup] = await Promise.all([
     tryAirbnbApi(classified.id).then((r) => r ?? []),
     gatherPhotosFromHtmlStrategies(cleanListing, photosUrl),
   ]);
 
-  const combined = dedupeAndPickLargest([...apiHits, ...htmlHits]);
+  const combined = dedupeAndPickLargest([...apiHits, ...htmlGroup.urls]);
+  const diag = [
+    {
+      name: "airbnb-v2-api",
+      ok: apiHits.length > 0,
+      bytes: 0,
+      photos: apiHits.length,
+    },
+    ...htmlGroup.report,
+  ];
 
   if (combined.length === 0) {
+    const triedStr = diag
+      .filter((d) => d.ok)
+      .map((d) => `${d.name} (${d.photos})`)
+      .join(", ");
     return NextResponse.json(
       {
         ok: false,
         code: "NO_PHOTOS",
         message:
-          "Couldn't find listing photos. The listing may be private or geo-restricted. As a backup, switch to 'Paste image URLs' above.",
+          triedStr.length > 0
+            ? `Reached the listing but no recognizable photo URLs were in the response. Strategies that came back with HTML: ${triedStr}. The listing may be private, just published (not yet on Wayback), or in an Airbnb layout we don't yet recognize. As a backup, switch to 'Paste image URLs' above.`
+            : "Couldn't reach the listing through any of our paths. The listing may be private or geo-restricted. As a backup, switch to 'Paste image URLs' above.",
         setupNeeded: false,
+        diag,
       },
       { status: 422 },
     );
@@ -529,6 +581,7 @@ export async function POST(req: Request) {
       listingId: classified.id,
       urls: combined,
       setupNeeded: false,
+      diag,
     } satisfies FetchResult,
   });
 }

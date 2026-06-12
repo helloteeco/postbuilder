@@ -41,6 +41,13 @@ interface Props {
 type Mode = "url" | "paste";
 type Pick = "top10" | "all";
 
+interface StrategyDiag {
+  name: string;
+  ok: boolean;
+  bytes: number;
+  photos: number;
+}
+
 interface FetchOk {
   ok: true;
   result: {
@@ -48,6 +55,7 @@ interface FetchOk {
     host: string;
     urls: string[];
     setupNeeded?: boolean;
+    diag?: StrategyDiag[];
   };
 }
 interface FetchErr {
@@ -55,8 +63,26 @@ interface FetchErr {
   code: string;
   message: string;
   setupNeeded?: boolean;
+  diag?: StrategyDiag[];
 }
 type FetchResp = FetchOk | FetchErr;
+
+function formatDiag(diag: StrategyDiag[] | undefined): string {
+  if (!diag || diag.length === 0) return "";
+  const winners = diag.filter((d) => d.ok && d.photos > 0);
+  const reached = diag.filter((d) => d.ok && d.photos === 0);
+  const failed = diag.filter((d) => !d.ok);
+  const parts: string[] = [];
+  if (winners.length > 0)
+    parts.push(
+      `Found photos via: ${winners.map((d) => `${d.name} (${d.photos})`).join(", ")}`,
+    );
+  if (reached.length > 0)
+    parts.push(`Reached but empty: ${reached.map((d) => d.name).join(", ")}`);
+  if (failed.length > 0)
+    parts.push(`Couldn't reach: ${failed.map((d) => d.name).join(", ")}`);
+  return parts.join(" · ");
+}
 
 export default function OverlayUrlImport({
   media,
@@ -87,7 +113,8 @@ export default function OverlayUrlImport({
       });
       const data = (await resp.json()) as FetchResp;
       if (!data.ok) {
-        setStatus(data.message);
+        const diagLine = formatDiag(data.diag);
+        setStatus(diagLine ? `${data.message}\n\n${diagLine}` : data.message);
         return;
       }
       const candidates = data.result.urls;
@@ -95,9 +122,9 @@ export default function OverlayUrlImport({
         setStatus("No photos found on that listing.");
         return;
       }
-      setStatus(
-        `Found ${candidates.length} photo${candidates.length === 1 ? "" : "s"}. Downloading…`,
-      );
+      const diagLine = formatDiag(data.result.diag);
+      const headline = `Found ${candidates.length} photo${candidates.length === 1 ? "" : "s"}. Downloading…`;
+      setStatus(diagLine ? `${headline}\n${diagLine}` : headline);
       await downloadScoreAndPush(candidates);
       setUrl("");
     } catch (err) {
