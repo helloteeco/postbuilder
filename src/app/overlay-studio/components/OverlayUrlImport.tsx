@@ -24,6 +24,7 @@ import { scorePhoto } from "@/app/overlay-studio/lib/photoScoring";
 import { enhancePhoto } from "@/app/overlay-studio/lib/photoEnhance";
 import { pickStoryCopy } from "@/app/overlay-studio/lib/storyScripts";
 import { readFileAsDataUrl } from "@/lib/shared-utils";
+import { buildBookmarkletUrl } from "@/app/overlay-studio/lib/bookmarklet";
 import {
   OUTPUT_DIMENSIONS,
   type OutputFormat,
@@ -38,7 +39,7 @@ interface Props {
   onSet: (next: OverlayMedia[]) => void;
 }
 
-type Mode = "url" | "paste";
+type Mode = "url" | "paste" | "bookmarklet";
 type Pick = "top10" | "all";
 
 interface StrategyDiag {
@@ -233,45 +234,86 @@ export default function OverlayUrlImport({
           Import from Airbnb
         </div>
         <span className="text-[10px] uppercase tracking-wider text-gray-400">
-          two ways
+          three ways
         </span>
       </div>
 
       {/* Mode toggle */}
-      <div className="mb-3 flex gap-1.5">
-        <button
-          type="button"
-          onClick={() => setMode("url")}
-          disabled={busy}
-          className={`flex-1 rounded border px-2 py-1.5 text-xs font-medium transition ${
-            mode === "url"
-              ? "border-gray-900 bg-gray-900 text-white"
-              : "border-gray-300 text-gray-700 hover:bg-gray-100"
-          }`}
-        >
-          Paste listing URL
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("paste")}
-          disabled={busy}
-          className={`flex-1 rounded border px-2 py-1.5 text-xs font-medium transition ${
-            mode === "paste"
-              ? "border-gray-900 bg-gray-900 text-white"
-              : "border-gray-300 text-gray-700 hover:bg-gray-100"
-          }`}
-          title="Always works — bypasses Airbnb's anti-bot"
-        >
-          Paste image URLs ✓
-        </button>
+      <div className="mb-3 grid grid-cols-3 gap-1.5">
+        {(
+          [
+            { key: "bookmarklet", label: "Bookmarklet ⚡" },
+            { key: "url", label: "Paste URL" },
+            { key: "paste", label: "Paste image URLs" },
+          ] as { key: Mode; label: string }[]
+        ).map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setMode(key)}
+            disabled={busy}
+            className={`rounded border px-2 py-1.5 text-xs font-medium transition ${
+              mode === key
+                ? "border-gray-900 bg-gray-900 text-white"
+                : "border-gray-300 text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {mode === "url" ? (
+      {mode === "bookmarklet" && (
+        <div className="space-y-2">
+          <p className="text-[11px] leading-relaxed text-gray-600">
+            <strong>One-time setup. Then 2 clicks forever.</strong> Drag
+            this button to your bookmarks bar:
+          </p>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a
+            href={buildBookmarkletUrl()}
+            onClick={(e) => {
+              e.preventDefault();
+              alert(
+                "Drag this button to your bookmarks bar instead of clicking it. (Bookmarklets can only run on the page they're being clicked from.)",
+              );
+            }}
+            draggable
+            className="inline-flex items-center gap-1.5 rounded-md bg-amber-400 px-3 py-1.5 text-xs font-bold text-amber-950 shadow hover:bg-amber-300"
+            title="Drag me to the bookmarks bar"
+          >
+            ⚡ Send to Overlay Studio
+          </a>
+          <p className="text-[11px] leading-relaxed text-gray-600">
+            Then for any Airbnb listing:
+          </p>
+          <ol className="list-decimal space-y-1 pl-5 text-[11px] text-gray-700">
+            <li>Open the listing in a tab.</li>
+            <li>
+              Click <em>Show all photos</em> so they all render in the DOM.
+            </li>
+            <li>Click the bookmark — photo URLs auto-copy.</li>
+            <li>
+              Come back here, switch to <strong>Paste image URLs</strong>,
+              paste, click <em>Add photos</em>. Done.
+            </li>
+          </ol>
+          <p className="rounded bg-gray-50 p-2 text-[11px] leading-relaxed text-gray-600">
+            Why this exists: Airbnb&apos;s server returns a stripped page
+            to anyone who isn&apos;t a logged-in browser, so server-side
+            scraping can&apos;t see the gallery. The bookmarklet runs in
+            your tab where Airbnb&apos;s own JS has already loaded the
+            photos. Works on every listing.
+          </p>
+        </div>
+      )}
+
+      {mode === "url" && (
         <>
           <p className="mb-2 text-[11px] text-gray-600">
             Paste the <code>/rooms/</code> URL. We race Airbnb&apos;s API
-            and a few render-the-page services in parallel, then merge
-            whatever they all returned. No setup needed.
+            and a few render-the-page services in parallel. Works for some
+            listings; if it returns thin, use the bookmarklet instead.
           </p>
           <input
             type="url"
@@ -282,13 +324,14 @@ export default function OverlayUrlImport({
             className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
           />
         </>
-      ) : (
+      )}
+
+      {mode === "paste" && (
         <>
           <p className="mb-2 text-[11px] leading-relaxed text-gray-600">
-            <strong>Bulletproof way</strong> — open the Airbnb listing,
-            click <em>Show all photos</em>, then right-click each photo →{" "}
-            <strong>Copy image address</strong>. Paste them here (one per
-            line, or all at once). Works every time.
+            Either paste output from the bookmarklet (recommended) or
+            right-click each photo on the Airbnb tab →{" "}
+            <strong>Copy image address</strong> → paste here, one per line.
           </p>
           <textarea
             value={pasted}
@@ -301,34 +344,38 @@ export default function OverlayUrlImport({
         </>
       )}
 
-      <div className="mt-2 flex items-center gap-3 text-[11px] text-gray-700">
-        <label className="flex items-center gap-1">
-          <input
-            type="radio"
-            checked={pick === "top10"}
-            onChange={() => setPick("top10")}
-            disabled={busy}
-          />
-          Top 10 (scored)
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="radio"
-            checked={pick === "all"}
-            onChange={() => setPick("all")}
-            disabled={busy}
-          />
-          All
-        </label>
-      </div>
-      <button
-        type="button"
-        onClick={mode === "url" ? runUrl : runPaste}
-        disabled={busy || (mode === "url" ? !url.trim() : !pasted.trim())}
-        className="mt-2 w-full rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black disabled:opacity-40"
-      >
-        {busy ? "Working…" : mode === "url" ? "Fetch photos" : "Add photos"}
-      </button>
+      {mode !== "bookmarklet" && (
+        <>
+          <div className="mt-2 flex items-center gap-3 text-[11px] text-gray-700">
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                checked={pick === "top10"}
+                onChange={() => setPick("top10")}
+                disabled={busy}
+              />
+              Top 10 (scored)
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                checked={pick === "all"}
+                onChange={() => setPick("all")}
+                disabled={busy}
+              />
+              All
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={mode === "url" ? runUrl : runPaste}
+            disabled={busy || (mode === "url" ? !url.trim() : !pasted.trim())}
+            className="mt-2 w-full rounded bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black disabled:opacity-40"
+          >
+            {busy ? "Working…" : mode === "url" ? "Fetch photos" : "Add photos"}
+          </button>
+        </>
+      )}
       {status && (
         <div className="mt-2 whitespace-pre-wrap text-[11px] text-gray-600">
           {status}

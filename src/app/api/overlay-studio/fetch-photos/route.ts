@@ -321,22 +321,24 @@ async function fetchDirect(url: string): Promise<string | null> {
 // Free, no API key required for either.
 async function fetchViaJinaReader(
   url: string,
-  engine: "default" | "cf-browser-rendering" | "browser" = "default",
+  opts: {
+    engine?: "default" | "cf-browser-rendering" | "browser";
+    waitForSelector?: string;
+    sleepMs?: number;
+  } = {},
 ): Promise<string | null> {
+  const { engine = "default", waitForSelector, sleepMs } = opts;
   try {
     const headers: Record<string, string> = {
       ...BROWSER_HEADERS,
-      // Markdown is Jina's default and turns out to be FINE for us
-      // because the embedded image links use plain muscache.com URLs
-      // that HOSTING_PHOTO_RE picks up just the same as in raw HTML.
-      // We don't force HTML mode anymore — Jina's HTML output sometimes
-      // pre-strips inline script blobs we depend on.
       "X-No-Cache": "true",
     };
     if (engine !== "default") headers["X-Engine"] = engine;
+    if (waitForSelector) headers["X-Wait-For-Selector"] = waitForSelector;
+    if (sleepMs) headers["X-Timeout"] = String(Math.ceil(sleepMs / 1000));
     const resp = await fetch(`https://r.jina.ai/${url}`, {
       headers,
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(25_000),
     });
     if (!resp.ok) return null;
     return await resp.text();
@@ -421,15 +423,41 @@ async function gatherPhotosFromHtmlStrategies(
   cleanListing: string,
   photosUrl: string,
 ): Promise<{ urls: string[]; report: StrategyReport[] }> {
+  // The gallery is the prize. Make Jina specifically wait for an img
+  // with a hosting/lombard CDN path before snapshotting — otherwise it
+  // returns the SSR shell before any photos hydrate.
+  const GALLERY_SEL =
+    'img[src*="Hosting-"], img[src*="muscache.com/im/pictures/hosting"], img[src*="muscache.com/im/pictures/lombard"]';
   const strategies: Array<{ name: string; run: () => Promise<string | null> }> = [
-    { name: "jina-cf:photos", run: () => fetchViaJinaReader(photosUrl, "cf-browser-rendering") },
-    { name: "jina-cf:rooms", run: () => fetchViaJinaReader(cleanListing, "cf-browser-rendering") },
-    { name: "jina-browser:photos", run: () => fetchViaJinaReader(photosUrl, "browser") },
-    { name: "jina-default:rooms", run: () => fetchViaJinaReader(cleanListing) },
+    {
+      name: "jina-browser-wait:photos",
+      run: () =>
+        fetchViaJinaReader(photosUrl, {
+          engine: "browser",
+          waitForSelector: GALLERY_SEL,
+          sleepMs: 20_000,
+        }),
+    },
+    {
+      name: "jina-browser-wait:rooms",
+      run: () =>
+        fetchViaJinaReader(cleanListing, {
+          engine: "browser",
+          waitForSelector: GALLERY_SEL,
+          sleepMs: 20_000,
+        }),
+    },
+    {
+      name: "jina-cf:photos",
+      run: () => fetchViaJinaReader(photosUrl, { engine: "cf-browser-rendering" }),
+    },
+    {
+      name: "jina-default:rooms",
+      run: () => fetchViaJinaReader(cleanListing),
+    },
     { name: "direct:photos", run: () => fetchDirect(photosUrl) },
     { name: "direct:rooms", run: () => fetchDirect(cleanListing) },
     { name: "allorigins:photos", run: () => fetchViaAllOrigins(photosUrl) },
-    { name: "allorigins:rooms", run: () => fetchViaAllOrigins(cleanListing) },
     { name: "wayback:rooms", run: () => fetchViaWayback(cleanListing) },
     { name: "scrapingbee:rooms", run: () => fetchViaScrapingBee(cleanListing) },
   ];
